@@ -130,7 +130,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
     openMergeStack(state.openMergeStack),
-    steppedInstructions(state.steppedInstructions)
+    steppedInstructions(state.steppedInstructions),
+    witnessNode(state.witnessNode),
+    witnessNodeNext()
 {
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
@@ -415,4 +417,14 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
     out << "\n";
     target = sf.caller;
   }
+}
+
+bool ExecutionState::inViolationNode() {
+  witnessNode.insert(witnessNodeNext.begin(), witnessNodeNext.end());
+  for (auto node : witnessNode){
+    if (node.violation) {
+      return true;
+    }
+  }
+  return false;
 }

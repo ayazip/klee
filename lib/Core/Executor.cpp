@@ -81,6 +81,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <vector>
+#include <set>
 
 using namespace llvm;
 using namespace klee;
@@ -135,12 +136,12 @@ cl::opt<bool> EmitAllErrors(
     cl::cat(TestGenCat));
 
 cl::opt<bool> CheckLeaks(
-    "check-leaks", cl::init(false),
+    "check-leaks", cl::init(true),
     cl::desc("Check for memory leaks"),
     cl::cat(TestGenCat));
 
 cl::opt<bool> CheckMemCleanup(
-    "check-memcleanup", cl::init(false),
+    "check-memcleanup", cl::init(true),
     cl::desc("Check for memory cleanup"),
     cl::cat(TestGenCat));
 
@@ -1374,6 +1375,14 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
+  KInstruction *ki = state.pc;
+  for (auto node : state.witnessNode) {
+    for (auto edge : node.edges) {
+      if (matchEdge(*edge.get(), ki, state))
+        state.witnessNodeNext.emplace(*(edge->target.lock()));
+      }
+  }
+
   ++stats::instructions;
   ++state.steppedInstructions;
   state.prevPC = state.pc;
@@ -1488,6 +1497,11 @@ void Executor::executeCall(ExecutionState &state,
     state.lastLoopFail = ki->inst;
     // fall-through
   } else if (isErrorCall(f->getName())) {
+      if (witness.get_spec(WitnessSpec::unreach_call) &&
+          witness.get_err_function() == ErrorFun && state.inViolationNode()) {
+        klee_message("Valid violation witness");
+        haltExecution=true;
+      }
       terminateStateOnError(state,
                             "ASSERTION FAIL: " + ErrorFun + " called",
 				            Executor::Assert);
@@ -1872,10 +1886,34 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
+
+      std::set<WitnessNode> nextTrue;
+      std::set<WitnessNode> nextFalse;
+      nextTrue.insert(state.witnessNode.begin(), state.witnessNode.end());
+      nextFalse.insert(state.witnessNode.begin(), state.witnessNode.end());
+
       if (branches.first)
-        transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
+        for (auto node : state.witnessNode)
+          for (auto edge : node.edges)
+            if (matchEdge(*edge, ki, state) && (edge->control.empty() ||
+                                                edge->control == "condition-true"))
+              (nextTrue).emplace(*(edge->target.lock()));
+
       if (branches.second)
+        for (auto node : state.witnessNode)
+          for (auto edge : node.edges)
+            if (matchEdge(*edge, ki, state) && (edge->control.empty() ||
+                                                edge->control == "condition-false"))
+                (nextFalse).emplace(*(edge->target.lock()));
+
+      if (branches.first){
+        branches.first->witnessNode.insert(nextTrue.begin(), nextTrue.end());
+        transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
+      }
+      if (branches.second){
+        branches.second->witnessNode.insert(nextFalse.begin(), nextFalse.end());
         transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+      }
     }
     break;
   }
@@ -3141,6 +3179,9 @@ void Executor::run(ExecutionState &initialState) {
     if (::dumpStates) dumpStates();
     if (::dumpPTree) dumpPTree();
 
+    state.witnessNode.insert(state.witnessNodeNext.begin(), state.witnessNodeNext.end());
+    state.witnessNodeNext.clear();
+
     checkMemoryUsage();
 
     updateStates(&state);
@@ -3429,6 +3470,11 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
       for (const auto mo : leaks) {
       info += getKValueInfo(state, mo->getPointer());
       }
+      if (witness.get_spec(WitnessSpec::valid_memtrack)
+              && state.inViolationNode()) {
+        klee_message("Valid violation witness");
+        haltExecution=true;
+      }
       terminateStateOnError(state, "memory error: memory not cleaned up",
                             Leak, nullptr, info);
     } else {
@@ -3444,6 +3490,11 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
         if (reachable.count(leak) == 0) {
           if (success) {
             std::string info = getKValueInfo(state, leak->getPointer());
+            if (witness.get_spec(WitnessSpec::valid_memcleanup)
+                    && state.inViolationNode()) {
+              klee_message("Valid violation witness");
+              haltExecution=true;
+            }
             terminateStateOnError(state, "memory error: memory leak detected",
                                   Leak, nullptr, info);
             return;
@@ -3525,6 +3576,15 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      enum TerminateReason termReason,
                                      const char *suffix,
                                      const llvm::Twine &info) {
+  if ((termReason == Free && witness.get_spec(WitnessSpec::valid_free)) ||
+      (termReason == Ptr && witness.get_spec(WitnessSpec::valid_deref)) ||
+      (termReason == Overflow && witness.get_spec(WitnessSpec::overflow))){
+    if (state.inViolationNode()) {
+      klee_message("Valid violation witness");
+      haltExecution=true;
+    }
+  }
+
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
   Instruction * lastInst;
@@ -4096,6 +4156,11 @@ void Executor::resolveExact(ExecutionState &state, const KValue &address,
   }
 
   if (unbound) {
+    if (name=="free" && witness.get_spec(WitnessSpec::valid_free) &&
+            state.inViolationNode()){
+      klee_message("Valid violation witness");
+      haltExecution=true;
+    }
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           Ptr, NULL, getKValueInfo(*unbound, optimAddress));
   }
@@ -4452,8 +4517,9 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
-  
-  if (pathWriter) 
+  state->setNode(witness.get_entry());
+
+  if (pathWriter)
     state->pathOS = pathWriter->open();
   if (symPathWriter) 
     state->symPathOS = symPathWriter->open();
@@ -4490,6 +4556,10 @@ void Executor::runFunctionAsMain(Function *f,
         argvOS->write(i * NumPtrBytes, arg->getPointer());
       }
     }
+  }
+
+  if (witness.get_spec(WitnessSpec::unreach_call)) {
+    ErrorFun = witness.get_err_function();
   }
   
   initializeGlobals(*state);
@@ -5026,4 +5096,45 @@ void Executor::setReplayNondet(const struct KTest *out) {
 Interpreter *Interpreter::create(LLVMContext &ctx, const InterpreterOptions &opts,
                                  InterpreterHandler *ih) {
   return new Executor(ctx, opts, ih);
+}
+
+bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState state) {
+  int line = ki->info->line;
+  int startline = edge.startline;
+
+  //set startline and endline -1 on missing?
+  if (ki->inst->getOpcode() != Instruction::Ret && startline != 0 &&
+      !(line == startline || (line > edge.startline && line <= edge.endline)))
+    return false;
+  if (!edge.retFromFunc.empty()) {
+    if (ki->inst->getOpcode() != Instruction::Ret)
+      return false;
+
+    //KInstIterator kcaller = state.stack.back().caller;
+    //Instruction *caller = kcaller ? kcaller->inst : 0;
+    //int caller_line = (caller != 0) ? caller->info->line : 0;
+
+    ReturnInst *ri = cast<ReturnInst>(ki->inst);
+    std::string fName = ri->getFunction()->getName();
+    if (fName != edge.retFromFunc)
+      return false;
+  }
+
+  if (!edge.enterFunc.empty()) {
+    if (edge.enterFunc != "main" ||
+        state.steppedInstructions > 1) {
+      if (ki->inst->getOpcode() != Instruction::Call)
+        return false;
+          CallInst *ci = cast<CallInst>(ki->inst);
+          CallSite cs(ci);
+          Value *fp = cs.getCalledValue();
+          Function *f = getTargetFunction(fp, state);
+          if (f != nullptr && f->getName() != edge.enterFunc)
+            return false;
+      }
+    }
+    if (!edge.control.empty() && ki->inst->getOpcode() != Instruction::Br)
+        return false;
+
+    return true;
 }

@@ -20,6 +20,7 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/ConcreteValue.h"
+#include "witnessChecking/WitnessParser.h"
 
 #include <map>
 #include <set>
@@ -226,6 +227,12 @@ public:
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
 
+  /// @brief Set of possible nodes
+  std::set<WitnessNode> witnessNode;
+
+  /// @brief Set of next possible nodes
+  std::set<WitnessNode> witnessNodeNext;
+
   NondetValue& addNondetValue(const KValue& val, bool isSigned, const std::string& name);
 
 private:
@@ -253,6 +260,9 @@ public:
 
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
+
+  void setNode(const WitnessNode &node) { witnessNode.clear(); witnessNode.insert(node); };
+  bool inViolationNode();
 };
 }
 

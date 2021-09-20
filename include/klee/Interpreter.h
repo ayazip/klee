@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "ConcreteValue.h"
+#include "witnessChecking/WitnessParser.h"
 
 struct KTest;
 
@@ -170,6 +171,8 @@ public:
 
   virtual void getCoveredLines(const ExecutionState &state,
                                std::map<const std::string*, std::set<unsigned> > &res) = 0;
+
+  virtual void setWitnessAut(WitnessAutomaton &a) = 0;
 };
 
 } // End klee namespace

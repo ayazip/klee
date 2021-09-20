@@ -24,6 +24,7 @@
 #include "klee/OptionCategories.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Statistics.h"
+#include "witnessChecking/WitnessParser.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
@@ -69,11 +70,14 @@ using namespace klee;
 
 namespace {
   cl::opt<std::string>
-  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
+  InputFile(cl::Positional, cl::desc("<input bytecode>"), cl::Required);
+
+  cl::opt<std::string>
+  WitnessFile(cl::Positional, cl::desc("<witness file>"), cl::Required);
 
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter,
-            cl::desc("<program arguments>..."));
+            cl::desc("<program arguments>..."), cl::Optional);
 
 
   /*** Test case options ***/
@@ -1626,6 +1630,13 @@ int main(int argc, char **argv, char **envp) {
   LLVMContext ctx;
   auto loadedModules = loadBitcode(InputFile, ctx, Opts);
 
+  //load witness file
+  WitnessAutomaton witness;
+  if (!witness.load(WitnessFile.c_str())) {
+    klee_error("error loading witness file '%s'", WitnessFile.c_str());
+  }
+
+
   // FIXME: Change me to std types.
   int pArgc;
   char **pArgv;
@@ -1678,6 +1689,7 @@ int main(int argc, char **argv, char **envp) {
     theInterpreter = Interpreter::create(ctx, IOpts, handler);
   assert(interpreter);
   handler->setInterpreter(interpreter);
+  interpreter->setWitnessAut(witness);
 
   for (int i=0; i<argc; i++) {
     handler->getInfoStream() << argv[i] << (i+1<argc ? " ":"\n");

@@ -127,6 +127,7 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   TimerGroup timers;
   std::unique_ptr<PTree> processTree;
+  WitnessAutomaton witness;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -527,6 +528,8 @@ public:
 
   void setReplayNondet(const struct KTest *out) override;
 
+  void setWitnessAut(WitnessAutomaton &a){ witness = a; };
+
   llvm::Module *setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
                           const ModuleOptions &opts) override;
 
@@ -573,6 +576,10 @@ public:
 
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
+
+  bool matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState state);
+
+
 };
   
 } // End klee namespace

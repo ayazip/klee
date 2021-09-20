@@ -6,11 +6,9 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_subdirectory(Basic)
-add_subdirectory(Support)
-add_subdirectory(Expr)
-add_subdirectory(Solver)
-add_subdirectory(Module)
-add_subdirectory(Core)
-add_subdirectory(WitnessParser)
+klee_add_component(witnessParser
+  WitnessParser.cpp
+)
+
+target_link_libraries(witnessParser PUBLIC ${LLVM_LIBS})
 
