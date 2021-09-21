@@ -2,7 +2,7 @@
 #include <fstream>
 #include <cstring>
 #include <string>
-#include "WitnessParser.h"
+#include "witnessChecking/WitnessParser.h"
 
 void rapidxml::parse_error_handler(const char *what, void *where) {
     std::cout << "Parse error: " << what << "\n";
@@ -60,6 +60,10 @@ bool WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
        //     std::cerr << "parse error: unknown attribute " << attr << std::endl;
        // }
         data_node = data_node->next_sibling("data");
+    }
+    if (data.spec.empty()) {
+        std::cerr << "parse error: invalid or missing witness specification" << std::endl;
+        return false;
     }
     // if anything missing print err, ret false
     return true;
@@ -229,7 +233,7 @@ bool WitnessAutomaton::load_spec(const std::string& str){
         data.spec.insert(WitnessSpec::valid_memtrack);
     if (str.find("valid-memcleanup") != std::string::npos)
         data.spec.insert(WitnessSpec::valid_memcleanup);
-    /** TODO: Other functions!!!! **/
+    /** TODO: Other error functions!!!! **/
     if (str.find("reach_error") != std::string::npos) {
         data.err_function = "reach_error";
         data.spec.insert(WitnessSpec::unreach_call);
