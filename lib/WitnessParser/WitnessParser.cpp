@@ -2,6 +2,8 @@
 #include <fstream>
 #include <cstring>
 #include <string>
+#include <queue>
+
 #include "witnessChecking/WitnessParser.h"
 
 void rapidxml::parse_error_handler(const char *what, void *where) {
@@ -142,6 +144,7 @@ bool WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
         if (!fill_edge_data(child, edge))
             return false;
         nodes[src_id].get()->edges.push_back(edge);
+        nodes[tar_id].get()->edges_in.push_back(edge);
         edges.push_back(edge);
 
         child = child->next_sibling("edge");
@@ -247,3 +250,32 @@ bool WitnessAutomaton::get_spec(WitnessSpec s){
     return data.spec.find(s) != data.spec.end();
 
 }
+
+// Returns a set of nodes, from which the given node is reachable.
+// Sets the "multiple" argument to true, if there are multiple paths
+// from the entry to the given node, false otherwise.
+std::set<WitnessNode> reverse_reachable(const node_ptr node, bool& multiple) {
+    std::set<WitnessNode> reached;
+    std::queue<std::weak_ptr<WitnessNode>> q;
+    q.push(node);
+    multiple = false;
+
+    while (!q.empty()) {
+        std::weak_ptr<WitnessNode> n = q.front();
+        for (edge_ptr e : n.lock()->edges_in) {
+            q.push(e->target);
+            if (!multiple && reached.find(*(e->target.lock())) != reached.end())
+                multiple = true;
+            reached.emplace(*(e->target.lock()));
+        }
+    }
+
+    return reached;
+
+}
+
+
+// Remove sink states
+//void WitnessAutomaton::remove_sink_states() {
+
+//}

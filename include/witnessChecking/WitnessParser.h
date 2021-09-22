@@ -27,6 +27,7 @@ using edge_ptr = std::shared_ptr<WitnessEdge>;
 struct WitnessNode {
     std::string id;
     std::vector<edge_ptr> edges;
+    std::vector<edge_ptr> edges_in;
     bool entry;
     bool sink;
     bool violation;
