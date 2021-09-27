@@ -26,8 +26,8 @@ using edge_ptr = std::shared_ptr<WitnessEdge>;
 
 struct WitnessNode {
     std::string id;
-    std::vector<edge_ptr> edges;
-    std::vector<edge_ptr> edges_in;
+    std::set<edge_ptr> edges;
+    std::set<edge_ptr> edges_in;
     bool entry;
     bool sink;
     bool violation;
@@ -71,8 +71,9 @@ struct WitnessData {
 class WitnessAutomaton {
     WitnessData data;
     std::map<std::string, node_ptr> nodes;
-    std::vector<edge_ptr> edges;
+    std::set<edge_ptr> edges;
     node_ptr entry;
+    std::set<node_ptr> violation;
 
     bool fill_edges(rapidxml::xml_node<>* root);
     bool fill_data(rapidxml::xml_node<>* root);
@@ -80,7 +81,15 @@ class WitnessAutomaton {
     bool fill_node_data (rapidxml::xml_node<>* xml_node, node_ptr node);
     bool fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge);
     bool load_spec(const std::string& str);
+    void remove_sink_states();
+    void free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes);
+    void cut_branch(edge_ptr edge);
+
+
 public:
+    std::vector<std::tuple<std::string, unsigned, unsigned,
+    klee::ConcreteValue>> replay_nondets;
+
     bool load (const char* filename);
     std::set<WitnessSpec> get_spec() { return data.spec; }
     WitnessNode get_entry() { return *entry; }

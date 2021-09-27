@@ -1004,6 +1004,11 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
                                                       bool isSigned,
                                                       const std::string& name,
                                                       bool isPointer) {
+  if (!executor.witness.replay_nondets.empty()) {
+      executor.replayNondet = executor.witness.replay_nondets;
+      klee_message("Replaying nondet values from witness file");
+  }
+
   // create nondet value if we are not replaying
   if (executor.replayNondet.empty()) {
     executor.bindLocal(target, state,
@@ -1044,8 +1049,9 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
   //klee_warning("Matching %s:%u:%u", name.c_str(), info->line, info->column);
 
   if (std::get<0>(nondet) == name &&
-      std::get<1>(nondet) == info->line &&
-      std::get<2>(nondet) == info->column) {
+      std::get<1>(nondet) == info->line /* &&
+       * Do not check column when replaying from witness
+       * std::get<2>(nondet) == info->column */ ) {
       auto& val = std::get<3>(nondet);
 
      //klee_warning("Matched nondet value for: %s:%u:%u to %lu",

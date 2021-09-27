@@ -4,7 +4,13 @@
 #include <string>
 #include <queue>
 
+#include "klee/ConcreteValue.h"
+#include "klee/Expr/Expr.h"
 #include "witnessChecking/WitnessParser.h"
+std::string get_assumption_result(std::string assumption);
+klee::ConcreteValue create_concrete_v(std::string function, std::string val);
+
+
 
 void rapidxml::parse_error_handler(const char *what, void *where) {
     std::cout << "Parse error: " << what << "\n";
@@ -97,6 +103,9 @@ bool WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
             }
             entry = nodes[id];
         }
+        if (nodes[id]->violation) {
+            violation.emplace(node);
+        }
         child = child->next_sibling("node");
     }
     if (!entry) {
@@ -143,9 +152,9 @@ bool WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
         edge.get()->target = nodes[tar_id];
         if (!fill_edge_data(child, edge))
             return false;
-        nodes[src_id].get()->edges.push_back(edge);
-        nodes[tar_id].get()->edges_in.push_back(edge);
-        edges.push_back(edge);
+        nodes[src_id].get()->edges.emplace(edge);
+        nodes[tar_id].get()->edges_in.emplace(edge);
+        edges.emplace(edge);
 
         child = child->next_sibling("edge");
     }
@@ -222,8 +231,9 @@ bool WitnessAutomaton::load (const char* filename){
         std::cerr << "parse error: document missing element graph" << std::endl;
         return false;
     }
-
-    return fill_data(root) && fill_nodes(root) && fill_edges(root);
+    bool ok = fill_data(root) && fill_nodes(root) && fill_edges(root);
+    remove_sink_states();
+    return ok;
 }
 
 
@@ -254,28 +264,116 @@ bool WitnessAutomaton::get_spec(WitnessSpec s){
 // Returns a set of nodes, from which the given node is reachable.
 // Sets the "multiple" argument to true, if there are multiple paths
 // from the entry to the given node, false otherwise.
-std::set<WitnessNode> reverse_reachable(const node_ptr node, bool& multiple) {
-    std::set<WitnessNode> reached;
+std::set<node_ptr> reverse_reachable(const node_ptr node, bool& multiple) {
+    std::set<node_ptr> reached;
     std::queue<std::weak_ptr<WitnessNode>> q;
+    reached.insert(node);
     q.push(node);
     multiple = false;
 
     while (!q.empty()) {
         std::weak_ptr<WitnessNode> n = q.front();
         for (edge_ptr e : n.lock()->edges_in) {
-            q.push(e->target);
-            if (!multiple && reached.find(*(e->target.lock())) != reached.end())
+            if (reached.find(e->source.lock()) != reached.end())
                 multiple = true;
-            reached.emplace(*(e->target.lock()));
+            else {
+                q.push(e->source);
+                reached.emplace(e->source.lock());
+            }
         }
+        q.pop();
     }
 
     return reached;
 
 }
 
+/* Remove sink states */
+void WitnessAutomaton::remove_sink_states() {
+    bool multiple = violation.size() > 1;
+    std::set<node_ptr> non_sink;
 
-// Remove sink states
-//void WitnessAutomaton::remove_sink_states() {
+    for (auto v_node : violation) {
+        std::set<node_ptr> r = reverse_reachable(v_node, multiple);
+        non_sink.insert(r.begin(), r.end());
+    }
+
+    std::vector<std::tuple<std::string, unsigned, unsigned,
+                           klee::ConcreteValue>> replay;
+
+    std::queue<node_ptr> q;
+    q.push(this->entry);
+    std::set<node_ptr> visited;
+
+    while (!q.empty()) {
+        node_ptr n = q.front();
+        visited.insert(n);
+        for (edge_ptr e : n->edges) {
+            if (non_sink.find(e->target.lock()) == non_sink.end()) {
+                cut_branch(e);
+            }
+            else {
+              if (visited.find(e->target.lock()) == visited.end()) {
+                q.push(e->target.lock());
+                if (!multiple && e->startline != 0 &&
+                    e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0)
+                    // TODO: create concrete value, check error in assumption
+                  replay.emplace_back(e->assumResFunc, e->startline, 0,
+                          create_concrete_v(e->assumResFunc,
+                                            e->assumption.substr(9)));
+
+
+              }
+              else {
+                  multiple = true;
+              }
+            }
+        }
+        q.pop();
+    }
+
+    if (!multiple)
+        replay_nondets = replay;
+}
+
+
+/* Correctly discard subgraph starting from given entry node */
+void WitnessAutomaton::free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes) {
+    deadnodes.emplace(entry);
+    if (entry->edges.empty())
+        return;
+    for (auto e : entry->edges) {
+        if (deadnodes.find(e->target.lock()) == deadnodes.end())
+            free_subtree(e->target.lock(), deadnodes);
+        entry->edges.erase(e);
+        entry->edges_in.erase(e);
+        edges.erase(e);
+    }
+}
+
+/* Remove everything after this edge from the automaton */
+void WitnessAutomaton::cut_branch(edge_ptr edge) {
+    node_ptr n = edge->target.lock();
+    std::set<node_ptr> deadnodes;
+    free_subtree(n, deadnodes);
+    for (auto dead : deadnodes) {
+        nodes.erase(dead->id);
+    }
+    edge->source.lock()->edges.erase(edge);
+
+}
+
+//std::string klee::ConcreteValue get_assumption_result(std::string assumption) {
+    //if (assumption.compare(0, 7, "\result") != 0))
+    //    return;
+//    return assumption.substr(9);
 
 //}
+
+// TODO: Other fun
+klee::ConcreteValue create_concrete_v(std::string function, std::string val) {
+    int64_t value = std::stoll(val);
+    if (function == "__VERIFIER_nondet_int")
+        return klee::ConcreteValue(klee::Expr::Int32, value, true);
+    // else return idk?
+}

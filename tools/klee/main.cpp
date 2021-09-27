@@ -114,7 +114,7 @@ namespace {
 
   cl::opt<bool>
   WriteWitness("write-witness",
-            cl::desc("Write .graphml files in the SV-COMP format (default=false)"),
+            cl::desc("Write .graphml files in the SV-COMP format (default=true)"),
             cl::cat(TestCaseCat));
 
   cl::opt<bool>
