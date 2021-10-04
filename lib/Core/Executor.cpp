@@ -3104,6 +3104,11 @@ void Executor::run(ExecutionState &initialState) {
 
   states.insert(&initialState);
 
+  if (!witness.replay_nondets.empty()) {
+      replayNondet = witness.replay_nondets;
+      klee_message("Replaying nondet values from witness file");
+  }
+
   if (usingSeeds) {
     std::vector<SeedInfo> &v = seedMap[&initialState];
     

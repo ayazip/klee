@@ -1844,6 +1844,7 @@ int main(int argc, char **argv, char **envp) {
             << '\n';
             handler->getInfoStream() << endInfo.str();
     handler->getInfoStream().flush();
+    klee_message(endInfo.str().c_str());
   }
 
   // Free all the args.
