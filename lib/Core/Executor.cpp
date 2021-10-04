@@ -1376,13 +1376,20 @@ void Executor::stepInstruction(ExecutionState &state) {
     statsTracker->stepInstruction(state);
 
   KInstruction *ki = state.pc;
-  for (auto node : state.witnessNode) {
-    for (auto edge : node.edges) {
-      if (matchEdge(*edge.get(), ki, state))
-        state.witnessNodeNext.emplace(*(edge->target.lock()));
+
+  if (state.witnessNode.size() != witness.get_nodes_number()) {
+      for (auto node : state.witnessNode) {
+        for (auto edge : node.edges) {
+
+          WitnessNode target = *(edge->target.lock());
+          if (state.witnessNode.find(target) != state.witnessNode.end() ||
+              state.witnessNodeNext.find(target) != state.witnessNodeNext.end())
+                  continue;
+          if (matchEdge(*edge.get(), ki, state))
+            state.witnessNodeNext.emplace(target);
+          }
       }
   }
-
   ++stats::instructions;
   ++state.steppedInstructions;
   state.prevPC = state.pc;
@@ -1892,19 +1899,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       nextTrue.insert(state.witnessNode.begin(), state.witnessNode.end());
       nextFalse.insert(state.witnessNode.begin(), state.witnessNode.end());
 
-      if (branches.first)
-        for (auto node : state.witnessNode)
-          for (auto edge : node.edges)
-            if (matchEdge(*edge, ki, state) && (edge->control.empty() ||
-                                                edge->control == "condition-true"))
-              (nextTrue).emplace(*(edge->target.lock()));
-
-      if (branches.second)
-        for (auto node : state.witnessNode)
-          for (auto edge : node.edges)
-            if (matchEdge(*edge, ki, state) && (edge->control.empty() ||
-                                                edge->control == "condition-false"))
-                (nextFalse).emplace(*(edge->target.lock()));
+      for (auto node : state.witnessNode) {
+        if (nextTrue.size() == witness.get_nodes_number())
+          break;
+        for (auto edge : node.edges) {
+          WitnessNode target = *(edge->target.lock());
+          if (state.witnessNodeNext.find(target) == state.witnessNodeNext.end())
+            continue;
+          if (state.witnessNode.find(target) != state.witnessNode.end())
+            continue;
+          if (branches.first && nextTrue.find(target) != nextTrue.end() &&
+              (edge->control.empty() || edge->control == "condition-true"))
+            (nextTrue).emplace(target);
+          if (branches.second && nextFalse.find(target) != nextFalse.end() &&
+              (edge->control.empty() || edge->control == "condition-false"))
+            (nextFalse).emplace(target);
+        }
+      }
 
       if (branches.first){
         branches.first->witnessNode.insert(nextTrue.begin(), nextTrue.end());
@@ -5102,7 +5113,6 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
   int line = ki->info->line;
   int startline = edge.startline;
 
-  //set startline and endline -1 on missing?
   if (ki->inst->getOpcode() != Instruction::Ret && startline != 0 &&
       !(line == startline || (line > edge.startline && line <= edge.endline)))
     return false;

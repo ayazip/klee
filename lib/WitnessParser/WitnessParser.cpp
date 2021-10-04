@@ -8,7 +8,8 @@
 #include "klee/Expr/Expr.h"
 #include "witnessChecking/WitnessParser.h"
 std::string get_assumption_result(std::string assumption);
-klee::ConcreteValue create_concrete_v(std::string function, std::string val);
+klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok);
+size_t get_result_position(std::string assumption);
 
 
 
@@ -309,25 +310,36 @@ void WitnessAutomaton::remove_sink_states() {
         node_ptr n = q.front();
         visited.insert(n);
         for (edge_ptr e : n->edges) {
+
             if (non_sink.find(e->target.lock()) == non_sink.end()) {
-                cut_branch(e);
+              cut_branch(e);
+              continue;
+            }
+
+            if (visited.find(e->target.lock()) == visited.end()) {
+              q.push(e->target.lock());
+
+              if (!multiple && /* e->startline != 0 && */
+                  e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
+                size_t pos = get_result_position(e->assumption);
+                if (pos == 0) {
+                    std::cerr << "warning: ignoring assumption.resultfuntion: invalid format" << std::endl;
+                    multiple = true; // change variable name
+                    continue;
+                }
+                bool ok;
+                auto value = create_concrete_v(e->assumResFunc,
+                                              e->assumption.substr(pos), ok);
+                if (!ok)
+                    multiple = true;
+                replay.emplace_back(e->assumResFunc, e->startline, 0, value);
+              }
+
             }
             else {
-              if (visited.find(e->target.lock()) == visited.end()) {
-                q.push(e->target.lock());
-                if (!multiple && e->startline != 0 &&
-                    e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0)
-                    // TODO: create concrete value, check error in assumption
-                  replay.emplace_back(e->assumResFunc, e->startline, 0,
-                          create_concrete_v(e->assumResFunc,
-                                            e->assumption.substr(9)));
-
-
-              }
-              else {
-                  multiple = true;
-              }
+              multiple = true;
             }
+
         }
         q.pop();
     }
@@ -354,26 +366,89 @@ void WitnessAutomaton::free_subtree(node_ptr entry, std::set<node_ptr>& deadnode
 /* Remove everything after this edge from the automaton */
 void WitnessAutomaton::cut_branch(edge_ptr edge) {
     node_ptr n = edge->target.lock();
+    if (n == nullptr){
+        edge->source.lock()->edges.erase(edge);
+        return;
+    }
     std::set<node_ptr> deadnodes;
     free_subtree(n, deadnodes);
     for (auto dead : deadnodes) {
         nodes.erase(dead->id);
     }
     edge->source.lock()->edges.erase(edge);
-
 }
 
-//std::string klee::ConcreteValue get_assumption_result(std::string assumption) {
-    //if (assumption.compare(0, 7, "\result") != 0))
-    //    return;
-//    return assumption.substr(9);
+size_t get_result_position(std::string assumption) {
+    std::string res = "\\result";
+    if (assumption.substr(0, 7).compare(res) != 0)
+        return 0;
 
-//}
+    size_t i = 7;
+    while (i < assumption.length() && assumption[i] == ' ')
+            i++;
+
+    if (i + 1 >= assumption.size() || assumption[i] != '=' ||
+            assumption[i + 1] != '=')
+        return 0;
+    i += 2;
+    while (i < assumption.size() && (assumption[i] == ' ' ||
+                                     assumption[i] == '('))
+        i++;
+
+    if (isdigit(assumption[i]) || assumption[i] == '-')
+        return i;
+
+    return 0;
+}
+
 
 // TODO: Other fun
-klee::ConcreteValue create_concrete_v(std::string function, std::string val) {
+klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok) {
+    ok = true;
     int64_t value = std::stoll(val);
     if (function == "__VERIFIER_nondet_int")
         return klee::ConcreteValue(klee::Expr::Int32, value, true);
+    if (function == "__VERIFIER_nondet_uint")
+        return klee::ConcreteValue(klee::Expr::Int32, value, false);
+    if (function == "__VERIFIER_nondet_bool")
+        return klee::ConcreteValue(klee::Expr::Bool, value, false);
+    if (function == "__VERIFIER_nondet__Bool")
+        return klee::ConcreteValue(klee::Expr::Bool, value, false);
+    if (function == "__VERIFIER_nondet_char")
+        return klee::ConcreteValue(klee::Expr::Int8, value, true);
+    if (function == "__VERIFIER_nondet_uchar")
+        return klee::ConcreteValue(klee::Expr::Int8, value, false);
+    if (function == "__VERIFIER_nondet_float")
+        return klee::ConcreteValue(8*sizeof(float), value, true);
+    if (function == "__VERIFIER_nondet_double")
+        return klee::ConcreteValue(8*sizeof(double), value, true);
+    if (function == "__VERIFIER_nondet_loff_t")
+        return klee::ConcreteValue(klee::Expr::Int32, value, false);
+    if (function == "__VERIFIER_nondet_long")
+        return klee::ConcreteValue(klee::Expr::Int64, value, true);
+    if (function == "__VERIFIER_nondet_ulong")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    if (function == "__VERIFIER_nondet_pointer")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    if (function == "__VERIFIER_nondet_pchar")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    if (function == "__VERIFIER_nondet_pthread_t")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    if (function == "__VERIFIER_nondet_short")
+        return klee::ConcreteValue(klee::Expr::Int16, value, true);
+    if (function == "__VERIFIER_nondet_ushort")
+        return klee::ConcreteValue(klee::Expr::Int16, value, false);
+    if (function == "__VERIFIER_nondet_u32")
+        return klee::ConcreteValue(klee::Expr::Int32, value, false);
+    if (function == "__VERIFIER_nondet_size_t")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    if (function == "__VERIFIER_nondet_unsigned")
+        return klee::ConcreteValue(klee::Expr::Int32, value, false);
+    if (function == "__VERIFIER_nondet_sector_t")
+        return klee::ConcreteValue(klee::Expr::Int64, value, false);
+    ok = false;
+    std::cerr << "warning: unknown function " << function << std::endl;
+    return klee::ConcreteValue(klee::Expr::Int32, value, true);
+
     // else return idk?
 }

@@ -1048,9 +1048,9 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
   auto& nondet = executor.replayNondet[position];
   //klee_warning("Matching %s:%u:%u", name.c_str(), info->line, info->column);
 
-  if (std::get<0>(nondet) == name &&
+  if (std::get<0>(nondet) == name  &&
       std::get<1>(nondet) == info->line /* &&
-       * Do not check column when replaying from witness
+      /* Do not check column when replaying from witness
        * std::get<2>(nondet) == info->column */ ) {
       auto& val = std::get<3>(nondet);
 
@@ -1219,7 +1219,7 @@ void SpecialFunctionHandler::handleVerifierNondetShort(ExecutionState &state,
   assert(arguments.empty() && "Wrong number of arguments");
 
   handleVerifierNondetType(state, target, Expr::Int16,
-                           /* isSigned = */ true, "__VERIFIER_nondet_ushort");
+                           /* isSigned = */ true, "__VERIFIER_nondet_short");
 }
 
 void SpecialFunctionHandler::handleVerifierNondetSizeT(ExecutionState &state,

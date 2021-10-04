@@ -95,6 +95,7 @@ public:
     WitnessNode get_entry() { return *entry; }
     std::string get_err_function() { return data.err_function; }
     bool get_spec(WitnessSpec s);
+    size_t get_nodes_number(){ return nodes.size(); }
 };
 
 
