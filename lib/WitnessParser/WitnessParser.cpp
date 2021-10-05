@@ -38,8 +38,6 @@ bool set_bool_val(const char* str, const char* attr_name, bool& attr) {
     return false;
 }
 
-//nepisat toto ako uplny idiot lmao
-//perhaps pridat funkciu? maybe not
 bool WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
     rapidxml::xml_node<> *data_node = root->first_node("data");
     char * attr;

@@ -1908,10 +1908,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             continue;
           if (state.witnessNode.find(target) != state.witnessNode.end())
             continue;
-          if (branches.first && nextTrue.find(target) != nextTrue.end() &&
+          if (branches.first && nextTrue.find(target) == nextTrue.end() &&
               (edge->control.empty() || edge->control == "condition-true"))
             (nextTrue).emplace(target);
-          if (branches.second && nextFalse.find(target) != nextFalse.end() &&
+          if (branches.second && nextFalse.find(target) == nextFalse.end() &&
               (edge->control.empty() || edge->control == "condition-false"))
             (nextFalse).emplace(target);
         }
