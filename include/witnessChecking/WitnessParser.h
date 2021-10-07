@@ -75,12 +75,12 @@ class WitnessAutomaton {
     node_ptr entry;
     std::set<node_ptr> violation;
 
-    bool fill_edges(rapidxml::xml_node<>* root);
-    bool fill_data(rapidxml::xml_node<>* root);
-    bool fill_nodes(rapidxml::xml_node<>* node);
-    bool fill_node_data (rapidxml::xml_node<>* xml_node, node_ptr node);
-    bool fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge);
-    bool load_spec(const std::string& str);
+    void fill_edges(rapidxml::xml_node<>* root);
+    void fill_data(rapidxml::xml_node<>* root);
+    void fill_nodes(rapidxml::xml_node<>* node);
+    void fill_node_data (rapidxml::xml_node<>* xml_node, node_ptr node);
+    void fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge);
+    void load_spec(const std::string& str);
     void remove_sink_states();
     void free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes);
     void cut_branch(edge_ptr edge);
@@ -90,7 +90,7 @@ public:
     std::vector<std::tuple<std::string, unsigned, unsigned,
     klee::ConcreteValue>> replay_nondets;
 
-    bool load (const char* filename);
+    void load (const char* filename);
     std::set<WitnessSpec> get_spec() { return data.spec; }
     WitnessNode get_entry() { return *entry; }
     std::string get_err_function() { return data.err_function; }

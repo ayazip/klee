@@ -1632,9 +1632,7 @@ int main(int argc, char **argv, char **envp) {
 
   //load witness file
   WitnessAutomaton witness;
-  if (!witness.load(WitnessFile.c_str())) {
-    klee_error("error loading witness file '%s'", WitnessFile.c_str());
-  }
+  witness.load(WitnessFile.c_str());
 
 
   // FIXME: Change me to std types.

@@ -7,6 +7,7 @@
 #include "klee/ConcreteValue.h"
 #include "klee/Expr/Expr.h"
 #include "witnessChecking/WitnessParser.h"
+#include "klee/Internal/Support/ErrorHandling.h"
 std::string get_assumption_result(std::string assumption);
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok);
 size_t get_result_position(std::string assumption);
@@ -14,31 +15,28 @@ size_t get_result_position(std::string assumption);
 
 
 void rapidxml::parse_error_handler(const char *what, void *where) {
-    std::cout << "Parse error: " << what << "\n";
-    std::abort();
+    klee::klee_error("Parsing failed: %s", what);
 }
 
 void print_err_invalid(const std::string& val, const char* attr) {
-    std::cerr << "parse error: "<< val << " is not a valid value for key " << attr << "\n";
+    klee::klee_error("Parsing failed: %s is not a valid value for key %s",
+                     val.c_str(), attr);
 }
 
 // true on success (including missing attr), false on parse error
-bool set_bool_val(const char* str, const char* attr_name, bool& attr) {
+void set_bool_val(const char* str, const char* attr_name, bool& attr) {
     if (strcmp(str, "") == 0)
-        return true;
+        return;
     if (str == std::string("true")) {
-        attr = true;
-        return true;
+        attr = true; return;
     }
     if (str == std::string("false")) {
-        attr = false;
-        return true;
+        attr = false; return;
     }
     print_err_invalid(str, attr_name);
-    return false;
 }
 
-bool WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
+void WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
     rapidxml::xml_node<> *data_node = root->first_node("data");
     char * attr;
     while (data_node) {
@@ -47,8 +45,10 @@ bool WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
             data.type = data_node->value();
         else if (strcmp(attr, "sourcecodelang") == 0) {
             char *lang = data_node->value();
-            if (strcmp(lang, "C") != 0)
-                std::cerr << "only C language is supported" << std::endl;
+            if (strcmp(lang, "C") != 0 && strcmp(lang, "c") != 0) {
+                klee::klee_message("Only C language is supported");
+                print_err_invalid(lang, "sourcecodelang");
+            }
             data.lang = lang;
         }
         else if (strcmp(attr, "producer") == 0)
@@ -69,36 +69,31 @@ bool WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
         data_node = data_node->next_sibling("data");
     }
     if (data.spec.empty()) {
-        std::cerr << "parse error: invalid or missing witness specification" << std::endl;
-        return false;
+        klee::klee_error("Parsing failed: Invalid or missing witness specification");
     }
-    // if anything missing print err, ret false
-    return true;
+    // if anything missing err
 }
 
-bool WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
+void WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
     rapidxml::xml_node<> *child = root->first_node("node");
     std::string id;
     while (child) {
         if (!child->first_attribute("id")) {
-            std::cerr << "parse error: node missing attribute id" << std::endl;
-            return false;
+            klee::klee_error("Parsing failed: Node missing attribute id");
         }
         id = child->first_attribute("id")->value();
         if (id.empty() || nodes.find(id) != nodes.end()) {
-            std::cerr << "parse error: missing or duplicate node id" << std::endl;
-            return false;
+            klee::klee_error("Parsing failed: Missing or duplicate node id");
         }
         node_ptr node(std::make_shared<WitnessNode>());
         nodes[id] = node;
         node->id=id;
 
-        if (!fill_node_data(child, nodes[id]))
-            return false;
+        fill_node_data(child, nodes[id]);
+
         if (nodes[id]->entry) {
             if (entry) {
-                std::cerr << "parse error: duplicate entry node" << std::endl;
-                return false;
+                klee::klee_error("Parsing failed: Duplicate entry node");
             }
             entry = nodes[id];
         }
@@ -107,60 +102,55 @@ bool WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
         }
         child = child->next_sibling("node");
     }
-    if (!entry) {
-        std::cerr << "parse error: missing entry node" << std::endl;
-        return false;
-    }
-    return true;
+    if (!entry)
+        klee::klee_error("Parsing failed: Missing entry node");
 }
 
-bool WitnessAutomaton::fill_node_data(rapidxml::xml_node<> *xml_node, node_ptr node) {
+void WitnessAutomaton::fill_node_data(rapidxml::xml_node<> *xml_node, node_ptr node) {
     rapidxml::xml_node<> *data_node =xml_node->first_node("data");
     char *attr;
     char *value;
     while (data_node) {
         attr = data_node->first_attribute("key")->value();
         value = data_node->value();
-        if ((strcmp(attr, "entry") == 0 && !set_bool_val(value, attr, node->entry))
-            || (strcmp(attr, "sink") == 0 && !set_bool_val(value, attr, node->sink))
-            || (strcmp(attr, "violation") == 0 && !set_bool_val(value, attr, node->violation)))
-                return false;
+        if (strcmp(attr, "entry") == 0)
+            set_bool_val(value, attr, node->entry);
+        if (strcmp(attr, "sink") == 0)
+            set_bool_val(value, attr, node->sink);
+        if (strcmp(attr, "violation") == 0)
+            set_bool_val(value, attr, node->violation);
         data_node = data_node->next_sibling();
     }
-    return true;
 }
 
-bool WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
+void WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
     rapidxml::xml_node<> *child = root->first_node("edge");
     std::string src_id;
     std::string tar_id;
     while (child) {
         if (!child->first_attribute("source") || !child->first_attribute("target")) {
-            std::cerr << "parse error: edge missing attribute source or target" << std::endl;
-            return false;
+            klee::klee_error("Parsing failed: Edge missing attribute source or target");
         }
         src_id = child->first_attribute("source")->value();
         tar_id = child->first_attribute("target")->value();
 
         if (nodes.find(src_id) == nodes.end() || nodes.find(tar_id) == nodes.end()) {
-            std::cerr << "parse error: edge between non existent nodes";
-            return false;
+            klee::klee_error("Parsing failed: Edge between non existent nodes");
         }
         edge_ptr edge = std::make_shared<WitnessEdge>();
         edge.get()->source = nodes[src_id];
         edge.get()->target = nodes[tar_id];
-        if (!fill_edge_data(child, edge))
-            return false;
+        fill_edge_data(child, edge);
+
         nodes[src_id].get()->edges.emplace(edge);
         nodes[tar_id].get()->edges_in.emplace(edge);
         edges.emplace(edge);
 
         child = child->next_sibling("edge");
     }
-    return true;
 }
 
-bool WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge) {
+void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge) {
     rapidxml::xml_node<> *data_node =xml_node->first_node("data");
     char * attr;
     while (data_node) {
@@ -175,7 +165,7 @@ bool WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
             char * control = data_node->value();
             if (strcmp(control, "condition-true") != 0
                     && strcmp(control, "condition-false") != 0)
-                std::cerr << "parse error: invalid value for attribute control" << std::endl;
+                print_err_invalid(control, "control");
             edge.get()->control = control;
         }
         else if (strcmp(attr, "startline") == 0) {
@@ -191,8 +181,7 @@ bool WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
             edge.get()->endoffset = std::strtol(data_node->value(), nullptr, 10);
         }
         else if (strcmp(attr, "enterLoopHead") == 0) {
-            if (!set_bool_val(data_node->value(), "enterLoopHead", edge->enterLoop))
-                return false;
+            set_bool_val(data_node->value(), "enterLoopHead", edge->enterLoop);
         }
         else if (strcmp(attr, "enterFunction") == 0)
             edge.get()->enterFunc = data_node->value();
@@ -204,15 +193,13 @@ bool WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
         //}
         data_node = data_node->next_sibling("data");
     }
-    return true;
 }
 
 
-bool WitnessAutomaton::load (const char* filename){
+void WitnessAutomaton::load (const char* filename){
     std::ifstream ifs(filename);
     if (!ifs.good()) {
-        std::cout << "error loading file" << std::endl;
-        return false;
+        klee::klee_error("Parsing failed: Can not load file");
     }
 
     std::string content( (std::istreambuf_iterator<char>(ifs) ),
@@ -222,21 +209,20 @@ bool WitnessAutomaton::load (const char* filename){
     wit.parse<0>(&content[0]);
 
     if (strcmp(wit.first_node()->name(), "graphml") != 0) {
-        std::cerr << "parse error: document missing element graphml" << std::endl;
-        return false;
+        klee::klee_error("Parsing failed: Document missing element graphml");
     }
     rapidxml::xml_node<>* root = wit.first_node()->first_node("graph");
     if (strcmp(root->name(), "graph") != 0) {
-        std::cerr << "parse error: document missing element graph" << std::endl;
-        return false;
+        klee::klee_error("Parsing failed: Document missing element graph");
     }
-    bool ok = fill_data(root) && fill_nodes(root) && fill_edges(root);
+    fill_data(root);
+    fill_nodes(root);
+    fill_edges(root);
     remove_sink_states();
-    return ok;
 }
 
 
-bool WitnessAutomaton::load_spec(const std::string& str){
+void WitnessAutomaton::load_spec(const std::string& str){
     if (str.find("valid-free") != std::string::npos)
         data.spec.insert(WitnessSpec::valid_free);
     if (str.find("valid-deref") != std::string::npos)
@@ -252,7 +238,6 @@ bool WitnessAutomaton::load_spec(const std::string& str){
     }
     if (str.find("! overflow") != std::string::npos)
         data.spec.insert(WitnessSpec::overflow);
-    return true;
 }
 
 bool WitnessAutomaton::get_spec(WitnessSpec s){
@@ -321,7 +306,7 @@ void WitnessAutomaton::remove_sink_states() {
                   e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
                 size_t pos = get_result_position(e->assumption);
                 if (pos == 0) {
-                    std::cerr << "warning: ignoring assumption.resultfuntion: invalid format" << std::endl;
+                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
                     multiple = true; // change variable name
                     continue;
                 }
@@ -447,6 +432,4 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
     ok = false;
     std::cerr << "warning: unknown function " << function << std::endl;
     return klee::ConcreteValue(klee::Expr::Int32, value, true);
-
-    // else return idk?
 }
