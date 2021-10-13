@@ -385,10 +385,13 @@ size_t get_result_position(std::string assumption) {
 }
 
 
-// TODO: Other fun
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok) {
     ok = true;
-    int64_t value = std::stoll(val);
+    int64_t value;
+    if (val.size() > 2 && val[0] == '0' && val[1] == 'x')
+        value = std::stoll(val, nullptr, 16);
+    else
+        value = std::stoll(val, nullptr, 10);
     if (function == "__VERIFIER_nondet_int")
         return klee::ConcreteValue(klee::Expr::Int32, value, true);
     if (function == "__VERIFIER_nondet_uint")
