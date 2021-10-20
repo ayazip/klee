@@ -1044,8 +1044,8 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
   //klee_warning("Matching %s:%u:%u", name.c_str(), info->line, info->column);
 
   if (std::get<0>(nondet) == name  &&
-      std::get<1>(nondet) == info->line /* &&
-      /* Do not check column when replaying from witness
+      (std::get<1>(nondet) == info->line || std::get<1>(nondet) == 0)/* &&
+       * Do not check column when replaying from witness
        * std::get<2>(nondet) == info->column */ ) {
       auto& val = std::get<3>(nondet);
 
