@@ -141,7 +141,7 @@ cl::opt<bool> CheckLeaks(
     cl::cat(TestGenCat));
 
 cl::opt<bool> CheckMemCleanup(
-    "check-memcleanup", cl::init(true),
+    "check-memcleanup", cl::init(false),
     cl::desc("Check for memory cleanup"),
     cl::cat(TestGenCat));
 
@@ -1262,7 +1262,7 @@ Executor::toConstant(ExecutionState &state,
   bool success = solver->getValue(state, e, value);
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
-
+  klee_warning("unsupported symbolic type: %s", reason);
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
@@ -1506,7 +1506,7 @@ void Executor::executeCall(ExecutionState &state,
   } else if (isErrorCall(f->getName())) {
       if (witness.get_spec(WitnessSpec::unreach_call) &&
           witness.get_err_function() == ErrorFun && state.inViolationNode()) {
-        klee_message("Valid violation witness");
+        klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
       }
       terminateStateOnError(state,
@@ -3479,16 +3479,15 @@ void Executor::reportError(const llvm::Twine &message, const ExecutionState &sta
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
   if ((CheckLeaks || CheckMemCleanup) && hasMemoryLeaks(state)) {
-    if (CheckMemCleanup) {
+    if (CheckMemCleanup && witness.get_spec(WitnessSpec::valid_memcleanup)) {
       auto leaks = getMemoryLeaks(state);
       assert(!leaks.empty() && "hasMemoryLeaks() bug");
       std::string info = "";
       for (const auto mo : leaks) {
       info += getKValueInfo(state, mo->getPointer());
       }
-      if (witness.get_spec(WitnessSpec::valid_memtrack)
-              && state.inViolationNode()) {
-        klee_message("Valid violation witness");
+      if (state.inViolationNode()) {
+        klee_message("Valid violation witness: valid-memcleanup");
         haltExecution=true;
       }
       terminateStateOnError(state, "memory error: memory not cleaned up",
@@ -3499,6 +3498,11 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
       assert(!leaks.empty() && "hasMemoryLeaks() bug");
 
       klee_warning("Found unfreed memory, checking if it still can be freed.");
+      if (witness.get_spec(WitnessSpec::valid_memtrack)
+              && state.inViolationNode()) {
+        klee_message("Valid violation witness: valid-memtrack");
+        haltExecution=true;
+      }
 
       std::set<const MemoryObject*> reachable;
       bool success = getReachableMemoryObjects(state, reachable);
@@ -3506,11 +3510,6 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
         if (reachable.count(leak) == 0) {
           if (success) {
             std::string info = getKValueInfo(state, leak->getPointer());
-            if (witness.get_spec(WitnessSpec::valid_memcleanup)
-                    && state.inViolationNode()) {
-              klee_message("Valid violation witness");
-              haltExecution=true;
-            }
             terminateStateOnError(state, "memory error: memory leak detected",
                                   Leak, nullptr, info);
             return;
@@ -3592,12 +3591,18 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      enum TerminateReason termReason,
                                      const char *suffix,
                                      const llvm::Twine &info) {
-  if ((termReason == Free && witness.get_spec(WitnessSpec::valid_free)) ||
-      (termReason == Ptr && witness.get_spec(WitnessSpec::valid_deref)) ||
-      (termReason == Overflow && witness.get_spec(WitnessSpec::overflow))){
-    if (state.inViolationNode()) {
-      klee_message("Valid violation witness");
-      haltExecution=true;
+  if (state.inViolationNode()) {
+      if (termReason == Free && witness.get_spec(WitnessSpec::valid_free)) {
+        klee_message("Valid violation witness: valid-free");
+        haltExecution=true;
+      }
+      if (termReason == Ptr && witness.get_spec(WitnessSpec::valid_deref)) {
+        klee_message("Valid violation witness: valid-deref");
+        haltExecution=true;
+      }
+      if (termReason == Overflow && witness.get_spec(WitnessSpec::overflow)) {
+        klee_message("Valid violation witness: no-overflow");
+        haltExecution=true;
     }
   }
 
@@ -3607,7 +3612,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
 
   // on abort, we want to report also uncleaned memory
-  if (CheckMemCleanup && termReason == Executor::Abort) {
+  if (CheckMemCleanup && (termReason == Executor::Abort
+                          || termReason == Executor::Assert)) {
     auto leaks = getMemoryLeaks(state);
     if (!leaks.empty()) {
       std::string info = "";
@@ -3619,6 +3625,11 @@ void Executor::terminateStateOnError(ExecutionState &state,
       if (EmitAllErrors || notemitted) {
         klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
         reportError(message.c_str(), state, info, suffix, termReason);
+      }
+
+      if (state.inViolationNode() && witness.get_spec(WitnessSpec::valid_memcleanup)) {
+              klee_message("Valid violation witness: valid-memcleanup");
+              haltExecution=true;
       }
       if (shouldExitOn(Executor::Leak))
         haltExecution = true;
@@ -4172,11 +4183,10 @@ void Executor::resolveExact(ExecutionState &state, const KValue &address,
   }
 
   if (unbound) {
-    if (name=="free" && witness.get_spec(WitnessSpec::valid_free) &&
-            state.inViolationNode()){
-      klee_message("Valid violation witness");
-      haltExecution=true;
-    }
+    if (name=="free")
+      terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
+                            Free, NULL, getKValueInfo(*unbound, optimAddress));
+    else
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           Ptr, NULL, getKValueInfo(*unbound, optimAddress));
   }
@@ -4576,6 +4586,10 @@ void Executor::runFunctionAsMain(Function *f,
 
   if (witness.get_spec(WitnessSpec::unreach_call)) {
     ErrorFun = witness.get_err_function();
+  }
+
+  if (witness.get_spec(WitnessSpec::valid_memcleanup)) {
+    CheckMemCleanup = true;
   }
   
   initializeGlobals(*state);
