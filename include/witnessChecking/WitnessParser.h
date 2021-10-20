@@ -98,7 +98,8 @@ public:
     size_t get_nodes_number(){ return nodes.size(); }
 };
 
-
+klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok);
+std::string get_result_string(std::string assumption);
 
 
 #endif // WITNESSPARSER_H
