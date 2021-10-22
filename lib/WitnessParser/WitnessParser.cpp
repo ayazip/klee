@@ -102,6 +102,9 @@ void WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
     }
     if (!entry)
         klee::klee_error("Parsing failed: Missing entry node");
+    if (violation.empty())
+        klee::klee_error("Parsing failed: No violation node");
+
 }
 
 void WitnessAutomaton::fill_node_data(rapidxml::xml_node<> *xml_node, node_ptr node) {
