@@ -3596,7 +3596,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
         klee_message("Valid violation witness: valid-free");
         haltExecution=true;
       }
-      if (termReason == Ptr && witness.get_spec(WitnessSpec::valid_deref)) {
+      if ((termReason == Ptr || termReason == BadVectorAccess) &&
+              witness.get_spec(WitnessSpec::valid_deref)) {
         klee_message("Valid violation witness: valid-deref");
         haltExecution=true;
       }
@@ -3612,8 +3613,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
 
   // on abort, we want to report also uncleaned memory
-  if (CheckMemCleanup && (termReason == Executor::Abort
-                          || termReason == Executor::Assert)) {
+  if (CheckMemCleanup && termReason == Executor::Abort) {
     auto leaks = getMemoryLeaks(state);
     if (!leaks.empty()) {
       std::string info = "";
