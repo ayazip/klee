@@ -3486,10 +3486,6 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
       for (const auto mo : leaks) {
       info += getKValueInfo(state, mo->getPointer());
       }
-      if (state.inViolationNode()) {
-        klee_message("Valid violation witness: valid-memcleanup");
-        haltExecution=true;
-      }
       terminateStateOnError(state, "memory error: memory not cleaned up",
                             Leak, nullptr, info);
     } else {
@@ -3498,11 +3494,6 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
       assert(!leaks.empty() && "hasMemoryLeaks() bug");
 
       klee_warning("Found unfreed memory, checking if it still can be freed.");
-      if (witness.get_spec(WitnessSpec::valid_memtrack)
-              && state.inViolationNode()) {
-        klee_message("Valid violation witness: valid-memtrack");
-        haltExecution=true;
-      }
 
       std::set<const MemoryObject*> reachable;
       bool success = getReachableMemoryObjects(state, reachable);
@@ -3592,18 +3583,28 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const char *suffix,
                                      const llvm::Twine &info) {
   if (state.inViolationNode()) {
-      if (termReason == Free && witness.get_spec(WitnessSpec::valid_free)) {
-        klee_message("Valid violation witness: valid-free");
+    if (termReason == Free && witness.get_spec(WitnessSpec::valid_free)) {
+      klee_message("Valid violation witness: valid-free");
+      haltExecution=true;
+    }
+    if ((termReason == Ptr || termReason == BadVectorAccess) &&
+            witness.get_spec(WitnessSpec::valid_deref)) {
+      klee_message("Valid violation witness: valid-deref");
+      haltExecution=true;
+    }
+    if (termReason == Overflow && witness.get_spec(WitnessSpec::overflow)) {
+      klee_message("Valid violation witness: no-overflow");
+      haltExecution=true;
+    }
+    if (termReason == Leak) {
+      if (witness.get_spec(WitnessSpec::valid_memtrack)) {
+        klee_message("Valid violation witness: valid-memtrack");
         haltExecution=true;
       }
-      if ((termReason == Ptr || termReason == BadVectorAccess) &&
-              witness.get_spec(WitnessSpec::valid_deref)) {
-        klee_message("Valid violation witness: valid-deref");
+      if (witness.get_spec(WitnessSpec::valid_memcleanup)) {
+        klee_message("Valid violation witness: valid-memcleanup");
         haltExecution=true;
       }
-      if (termReason == Overflow && witness.get_spec(WitnessSpec::overflow)) {
-        klee_message("Valid violation witness: no-overflow");
-        haltExecution=true;
     }
   }
 
