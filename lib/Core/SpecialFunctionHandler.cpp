@@ -170,6 +170,9 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__ubsan_handle_sub_overflow", handleSubOverflow, false),
   add("__ubsan_handle_mul_overflow", handleMulOverflow, false),
   add("__ubsan_handle_divrem_overflow", handleDivRemOverflow, false),
+  add("__ubsan_handle_shift_out_of_bounds", handleShiftOverflow, false),
+  add("__ubsan_handle_negate_overflow", handleNegOverflow, false),
+
 
   add("pthread_create", handlePthreadCreate, true),
   add("pthread_join", handlePthreadJoin, true),
@@ -1294,6 +1297,20 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
                                                KInstruction *target,
                                                const std::vector<Cell> &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
+                                 Executor::Overflow);
+}
+
+void SpecialFunctionHandler::handleShiftOverflow(ExecutionState &state,
+                                               KInstruction *target,
+                                               const std::vector<Cell> &arguments) {
+  executor.terminateStateOnError(state, "overflow on shift",
+                                 Executor::Overflow);
+}
+
+void SpecialFunctionHandler::handleNegOverflow(ExecutionState &state,
+                                               KInstruction *target,
+                                               const std::vector<Cell> &arguments) {
+  executor.terminateStateOnError(state, "overflow on negate",
                                  Executor::Overflow);
 }
 
