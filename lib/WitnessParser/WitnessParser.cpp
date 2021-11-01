@@ -39,8 +39,11 @@ void WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
     char * attr;
     while (data_node) {
         attr = data_node->first_attribute("key")->value();
-        if (strcmp(attr, "witness-type") == 0)
+        if (strcmp(attr, "witness-type") == 0) {
+            if (strcmp(data_node->value(), "violation_witness") != 0)
+                klee::klee_error("Only error witnesses are supported");
             data.type = data_node->value();
+        }
         else if (strcmp(attr, "sourcecodelang") == 0) {
             char *lang = data_node->value();
             if (strcmp(lang, "C") != 0 && strcmp(lang, "c") != 0) {
