@@ -2974,14 +2974,15 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
 }
 
 void Executor::bindInstructionConstants(KInstruction *KI) {
-  KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
-
   if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-    computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
+    computeOffsets(static_cast<KGEPInstruction*>(KI),
+                   gep_type_begin(gepi), gep_type_end(gepi));
   } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+    KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
     computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
     assert(kgepi->indices.empty() && "InsertValue constant offset expected");
   } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+    KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
     computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
     assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
   }
@@ -4024,10 +4025,10 @@ Executor::executeAlloc(ExecutionState &state,
     } else {
       ObjectState *os = new ObjectState(*reallocFrom, mo);
       auto *oldobj = const_cast<MemoryObject*>(reallocFrom->getObject());
-      state.addressSpace.unbindObject(oldobj);
       state.addressSpace.removedObjectsMap.insert(
         std::make_pair(oldobj->segment,
                        oldobj->getSymbolicAddress(arrayCache)));
+      state.addressSpace.unbindObject(oldobj);
       state.addressSpace.bindObject(mo, os);
     }
   }
