@@ -2194,6 +2194,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       executeCall(state, ki, f, arguments);
     } else {
       auto pointer = eval(ki, 0, state);
+      if (pointer.isZero()) {
+        //terminateStateOnExecError(state, "call of nullptr");
+        terminateStateOnError(state, "memory error: calling nullptr", Ptr,
+                              nullptr, getKValueInfo(state, pointer));
+        break;
+      }
       // We handle constant segments for now
       assert((cast<ConstantExpr>(pointer.getSegment())->getZExtValue()
                 == FUNCTIONS_SEGMENT) && "Invalid function pointer");
@@ -2361,7 +2367,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     KValue left = eval(ki, 0, state);
     KValue right = eval(ki, 1, state);
 
-    // is one of operands pointer and none of them is null?
+    // is one of operands a pointer and none of them is null?
     if ((!left.getSegment()->isZero() || !right.getSegment()->isZero())
         && (!left.isZero() && !right.isZero())) {
 
@@ -2373,7 +2379,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
            (predicate != ICmpInst::ICMP_EQ &&
             predicate != ICmpInst::ICMP_NE)) {
           terminateStateOnExecError(
-            state, "Comparison other than (in)equality is not implemented"
+            state, "Comparison other than (in)equality is not implemented "
                    "for symbolic pointers");
           break;
       }
@@ -3023,14 +3029,15 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
 }
 
 void Executor::bindInstructionConstants(KInstruction *KI) {
-  KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
-
   if (GetElementPtrInst *gepi = dyn_cast<GetElementPtrInst>(KI->inst)) {
-    computeOffsets(kgepi, gep_type_begin(gepi), gep_type_end(gepi));
+    computeOffsets(static_cast<KGEPInstruction*>(KI),
+                   gep_type_begin(gepi), gep_type_end(gepi));
   } else if (InsertValueInst *ivi = dyn_cast<InsertValueInst>(KI->inst)) {
+    KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
     computeOffsets(kgepi, iv_type_begin(ivi), iv_type_end(ivi));
     assert(kgepi->indices.empty() && "InsertValue constant offset expected");
   } else if (ExtractValueInst *evi = dyn_cast<ExtractValueInst>(KI->inst)) {
+    KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(KI);
     computeOffsets(kgepi, ev_type_begin(evi), ev_type_end(evi));
     assert(kgepi->indices.empty() && "ExtractValue constant offset expected");
   }
@@ -3434,6 +3441,9 @@ Executor::getReachableMemoryObjects(ExecutionState &state,
                   queue.insert(result);
               }
           } else {
+              if (state.addressSpace.removedObjectsMap.count(segval) > 0)
+                  continue; // this memory object has been freed
+
               klee_warning("Failed resolving segment in memcleanup check");
               retval = false;
           }
@@ -4112,10 +4122,10 @@ Executor::executeAlloc(ExecutionState &state,
     } else {
       ObjectState *os = new ObjectState(*reallocFrom, mo);
       auto *oldobj = const_cast<MemoryObject*>(reallocFrom->getObject());
-      state.addressSpace.unbindObject(oldobj);
       state.addressSpace.removedObjectsMap.insert(
         std::make_pair(oldobj->segment,
                        oldobj->getSymbolicAddress(arrayCache)));
+      state.addressSpace.unbindObject(oldobj);
       state.addressSpace.bindObject(mo, os);
     }
   }
@@ -5115,9 +5125,15 @@ void Executor::setReplayNondet(const struct KTest *out) {
                     val.getPointer().getZExtValue(),
                     val.getValue().getZExtValue());
     } else {
-      klee_message("Input vector: %s:%u:%u = %lu",
-                    std::get<0>(nv).c_str(), std::get<1>(nv),
-                    std::get<2>(nv), val.getValue().getZExtValue());
+      if (val.getValue().getBitWidth() <= 64) {
+        klee_message("Input vector: %s:%u:%u = %lu",
+                      std::get<0>(nv).c_str(), std::get<1>(nv),
+                      std::get<2>(nv), val.getValue().getZExtValue());
+      } else {
+        klee_message("Input vector: %s:%u:%u = ... %u bits ...",
+                      std::get<0>(nv).c_str(), std::get<1>(nv),
+                      std::get<2>(nv), val.getValue().getBitWidth());
+      }
     }
   }
 }

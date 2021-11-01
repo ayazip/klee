@@ -107,7 +107,9 @@ bool AddressSpace::resolveOne(ExecutionState &state,
     }
 
     if (!segment->isZero()) {
-      return resolveOneConstantSegment(KValue(segment, pointer.getOffset()), result);
+      success = resolveOneConstantSegment(KValue(segment, pointer.getOffset()),
+                                          result);
+      return success;
     }
 
     // didn't work, now we have to search
@@ -166,6 +168,7 @@ bool AddressSpace::resolveOne(ExecutionState &state,
       }
     }
 
+    // we found an object, but it is not a unique one
     success = false;
     return true;
   }
