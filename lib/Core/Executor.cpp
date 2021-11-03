@@ -5155,18 +5155,13 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
   if (!edge.retFromFunc.empty()) {
     if (ki->inst->getOpcode() != Instruction::Ret)
       return false;
-
-    //KInstIterator kcaller = state.stack.back().caller;
-    //Instruction *caller = kcaller ? kcaller->inst : 0;
-    //int caller_line = (caller != 0) ? caller->info->line : 0;
-
     ReturnInst *ri = cast<ReturnInst>(ki->inst);
     std::string fName = ri->getFunction()->getName();
     if (fName != edge.retFromFunc)
       return false;
   }
 
-  if (!edge.enterFunc.empty()) {
+  if (!edge.enterFunc.empty() || !edge.assumResFunc.empty()) {
     if (edge.enterFunc != "main" ||
         state.steppedInstructions > 1) {
       if (ki->inst->getOpcode() != Instruction::Call)
@@ -5175,7 +5170,8 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
           CallSite cs(ci);
           Value *fp = cs.getCalledValue();
           Function *f = getTargetFunction(fp, state);
-          if (f != nullptr && f->getName() != edge.enterFunc)
+          if (f != nullptr && f->getName() != edge.enterFunc
+                               && f->getName() != edge.assumResFunc)
             return false;
       }
     }
