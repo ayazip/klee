@@ -278,11 +278,11 @@ std::set<node_ptr> reverse_reachable(const node_ptr node, bool& multiple) {
 
 /* Remove sink states */
 void WitnessAutomaton::remove_sink_states() {
-    bool multiple = violation.size() > 1;
+    bool no_replay = violation.size() > 1;
     std::set<node_ptr> non_sink;
 
     for (auto v_node : violation) {
-        std::set<node_ptr> r = reverse_reachable(v_node, multiple);
+        std::set<node_ptr> r = reverse_reachable(v_node, no_replay);
         non_sink.insert(r.begin(), r.end());
     }
 
@@ -306,31 +306,31 @@ void WitnessAutomaton::remove_sink_states() {
             if (visited.find(e->target.lock()) == visited.end()) {
               q.push(e->target.lock());
 
-              if (!multiple && /* e->startline != 0 && */
+              if (!no_replay && /* e->startline != 0 && */
                   e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
-                std::string v = get_result_string(e->assumption);
-                if (v.empty()) {
+                std::string value_string = get_result_string(e->assumption);
+                if (value_string.empty()) {
                     klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    multiple = true; // change variable name
+                    no_replay = true; // change variable name
                     continue;
                 }
                 bool ok;
-                auto value = create_concrete_v(e->assumResFunc, v, ok);
+                auto value = create_concrete_v(e->assumResFunc, value_string, ok);
                 if (!ok)
-                    multiple = true;
+                    no_replay = true;
                 replay.emplace_back(e->assumResFunc, e->startline, 0, value);
               }
 
             }
             else {
-              multiple = true;
+              no_replay = true;
             }
 
         }
         q.pop();
     }
 
-    if (!multiple)
+    if (!no_replay)
         replay_nondets = replay;
 }
 
@@ -387,7 +387,7 @@ std::string get_result_string(std::string assumption) {
 
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok) {
     ok = false;
-    int64_t value;
+    int64_t value = 0;
     if (isdigit(val[0]) || val[0] == '-') {
         size_t end;
         value = std::stoll(val, &end, 0);
