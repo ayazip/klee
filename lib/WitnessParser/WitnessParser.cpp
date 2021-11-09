@@ -286,8 +286,7 @@ void WitnessAutomaton::remove_sink_states() {
         non_sink.insert(r.begin(), r.end());
     }
 
-    std::vector<std::tuple<std::string, unsigned, unsigned,
-                           klee::ConcreteValue>> replay;
+    std::vector<klee::ConcreteValue> replay;
 
     std::queue<node_ptr> q;
     q.push(this->entry);
@@ -311,14 +310,16 @@ void WitnessAutomaton::remove_sink_states() {
                 std::string value_string = get_result_string(e->assumption);
                 if (value_string.empty()) {
                     klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    no_replay = true; // change variable name
                     continue;
                 }
                 bool ok;
                 auto value = create_concrete_v(e->assumResFunc, value_string, ok);
-                if (!ok)
-                    no_replay = true;
-                replay.emplace_back(e->assumResFunc, e->startline, 0, value);
+                if (!ok) {
+                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
+                    continue;
+                }
+                replay.emplace_back(value);
+                e->result_index = replay.size() - 1;
               }
 
             }
@@ -329,7 +330,6 @@ void WitnessAutomaton::remove_sink_states() {
         }
         q.pop();
     }
-
     if (!no_replay)
         replay_nondets = replay;
 }

@@ -3111,11 +3111,6 @@ void Executor::run(ExecutionState &initialState) {
 
   states.insert(&initialState);
 
-  if (!witness.replay_nondets.empty()) {
-      replayNondet = witness.replay_nondets;
-      klee_message("Replaying nondet values from witness file");
-  }
-
   if (usingSeeds) {
     std::vector<SeedInfo> &v = seedMap[&initialState];
     
@@ -5145,7 +5140,7 @@ Interpreter *Interpreter::create(LLVMContext &ctx, const InterpreterOptions &opt
   return new Executor(ctx, opts, ih);
 }
 
-bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState state) {
+bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState& state) {
   int line = ki->info->line;
   int startline = edge.startline;
 
@@ -5170,13 +5165,20 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
           CallSite cs(ci);
           Value *fp = cs.getCalledValue();
           Function *f = getTargetFunction(fp, state);
-          if (f != nullptr && f->getName() != edge.enterFunc
-                               && f->getName() != edge.assumResFunc)
+          if (f != nullptr && (edge.enterFunc.empty() ||
+                               f->getName() != edge.enterFunc)
+                           && (edge.assumResFunc.empty() ||
+                               f->getName() != edge.assumResFunc))
             return false;
       }
     }
-    if (!edge.control.empty() && ki->inst->getOpcode() != Instruction::Br)
-        return false;
+  if (!edge.control.empty() && ki->inst->getOpcode() != Instruction::Br)
+    return false;
 
-    return true;
+  if (!edge.assumResFunc.empty()) {
+    state.replayEdges.push(edge);
+    assert(!state.replayEdges.empty());
+    return false;
+    }
+  return true;
 }

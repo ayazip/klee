@@ -25,6 +25,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <queue>
 
 namespace klee {
 class Array;
@@ -232,6 +233,9 @@ public:
 
   /// @brief Set of next possible nodes
   std::set<WitnessNode> witnessNodeNext;
+
+  /// @brief Edges with possible replay values
+  std::queue<WitnessEdge> replayEdges;
 
   NondetValue& addNondetValue(const KValue& val, bool isSigned, const std::string& name);
 

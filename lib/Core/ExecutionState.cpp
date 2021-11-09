@@ -132,7 +132,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions),
     witnessNode(state.witnessNode),
-    witnessNodeNext()
+    witnessNodeNext(),
+    replayEdges()
 {
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;

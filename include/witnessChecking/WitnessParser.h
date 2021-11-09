@@ -45,6 +45,7 @@ struct WitnessEdge {
     std::string assumption;
     std::string assumScope;
     std::string assumResFunc;
+    int result_index = -1;
     std::string control;
     long startline;
     long endline;
@@ -87,9 +88,7 @@ class WitnessAutomaton {
 
 
 public:
-    std::vector<std::tuple<std::string, unsigned, unsigned,
-    klee::ConcreteValue>> replay_nondets;
-
+    std::vector<klee::ConcreteValue> replay_nondets;
     void load (const char* filename);
     std::set<WitnessSpec> get_spec() { return data.spec; }
     WitnessNode get_entry() { return *entry; }

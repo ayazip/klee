@@ -577,7 +577,7 @@ public:
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
 
-  bool matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState state);
+  bool matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState& state);
 
 
 };
