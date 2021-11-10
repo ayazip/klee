@@ -1263,6 +1263,10 @@ Executor::toConstant(ExecutionState &state,
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
   klee_warning("unsupported symbolic type: %s", reason);
+
+  // Don't allow silent concretization of floats when witness checking
+  if (strcmp(reason, "floating point") == 0)
+      haltExecution = true;
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e

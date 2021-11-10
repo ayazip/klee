@@ -426,11 +426,27 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
     if (function == "__VERIFIER_nondet_uchar")
         return klee::ConcreteValue(klee::Expr::Int8, value, false);
 
-    if (function == "__VERIFIER_nondet_float")
-        return klee::ConcreteValue(8*sizeof(float), value, true);
+    if (function == "__VERIFIER_nondet_float") {
+        if (isdigit(val[0]) || val[0] == '-') {
+            size_t end;
+            float f_value = std::stof(val, &end);
+            if (end == val.size())
+                ok = true;
+            llvm::APFloat ap_fvalue(f_value);
+            return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
+        }
+    }
 
-    if (function == "__VERIFIER_nondet_double")
-        return klee::ConcreteValue(8*sizeof(double), value, true);
+    if (function == "__VERIFIER_nondet_double") {
+        if (isdigit(val[0]) || val[0] == '-') {
+            size_t end;
+            float d_value = std::stod(val, &end);
+            if (end == val.size())
+                ok = true;
+            llvm::APFloat ap_fvalue(d_value);
+            return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
+        }
+    }
 
     if (function == "__VERIFIER_nondet_loff_t")
         return klee::ConcreteValue(klee::Expr::Int32, value, false);
