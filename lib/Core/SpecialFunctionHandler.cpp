@@ -1023,14 +1023,19 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
                             executor.createNondetValue(state, size,
                                                        isSigned, target, name));
       } else {
-        auto& val = executor.witness.replay_nondets[edge.result_index];
+          // TODO: ConstantsExpr::alloca in witness parsing, instead of ConcreteValue
+         auto& val = executor.witness.replay_nondets[edge.result_index];
 
-         //klee_warning("Matched nondet value for: %s:%u:%u to %lu",
-         //             std::get<0>(nondet).c_str(), std::get<1>(nondet),
-         //             std::get<2>(nondet), val.getZExtValue());
-
-        putConcreteValue(state, name, val.isSigned(), target,
-                           ConstantExpr::alloc(val.getZExtValue(), size));
+        if (name == "__VERIFIER_nondet_double") {
+          size_t end;
+          double d_value = std::stod(get_result_string(edge.assumption), &end);
+          llvm::APFloat ap_fvalue(d_value);
+          putConcreteValue(state, name, val.isSigned(), target,
+                               ConstantExpr::alloc(ap_fvalue));
+        }
+        else
+            putConcreteValue(state, name, val.isSigned(), target,
+                             ConstantExpr::alloc(val.getZExtValue(), size));
       }
       state.replayEdges.pop();
       state.witnessNodeNext.emplace(*(edge.target.lock()));

@@ -418,8 +418,10 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
         return klee::ConcreteValue(klee::Expr::Bool, value, false);
 
     if (function == "__VERIFIER_nondet_char") {
-        if ((val[0] == '"' || val[0] == '"') && val.size() >= 3 && val[0]==val[2]) {
-                ok = true; value = (int64_t)val[1];
+        if ((val[0] == '"' || val[0] == '"') && val.size() >= 3
+                && val[0]==val[2]) {
+                ok = true;
+                value = (int64_t)val[1];
         }
         return klee::ConcreteValue(klee::Expr::Int8, value, true);
     }
@@ -427,25 +429,21 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
         return klee::ConcreteValue(klee::Expr::Int8, value, false);
 
     if (function == "__VERIFIER_nondet_float") {
-        if (isdigit(val[0]) || val[0] == '-') {
-            size_t end;
-            float f_value = std::stof(val, &end);
-            if (end == val.size())
-                ok = true;
-            llvm::APFloat ap_fvalue(f_value);
-            return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
-        }
+        size_t end;
+        float f_value = std::stof(val, &end);
+        if (end == val.size())
+            ok = true;
+        llvm::APFloat ap_fvalue(f_value);
+        return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
     }
 
     if (function == "__VERIFIER_nondet_double") {
-        if (isdigit(val[0]) || val[0] == '-') {
-            size_t end;
-            float d_value = std::stod(val, &end);
-            if (end == val.size())
-                ok = true;
-            llvm::APFloat ap_fvalue(d_value);
-            return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
-        }
+        size_t end;
+        float d_value = std::stod(val, &end);
+        if (end == val.size())
+            ok = true;
+        llvm::APFloat ap_fvalue(d_value);
+        return klee::ConcreteValue(ap_fvalue.bitcastToAPInt(), true);
     }
 
     if (function == "__VERIFIER_nondet_loff_t")
@@ -485,6 +483,7 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
         return klee::ConcreteValue(klee::Expr::Int64, value, false);
 
     ok = false;
-    klee::klee_warning("Parsing: unknown function %s or invalid value", function.c_str());
+    klee::klee_warning("Parsing: unknown function %s or invalid value",
+                       function.c_str());
     return klee::ConcreteValue(klee::Expr::Int32, value, true);
 }

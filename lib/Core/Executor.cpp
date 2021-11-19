@@ -5151,6 +5151,7 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
   if (ki->inst->getOpcode() != Instruction::Ret && startline != 0 &&
       !(line == startline || (line > edge.startline && line <= edge.endline)))
     return false;
+
   if (!edge.retFromFunc.empty()) {
     if (ki->inst->getOpcode() != Instruction::Ret)
       return false;
@@ -5159,6 +5160,8 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
     if (fName != edge.retFromFunc)
       return false;
   }
+
+  // TODO: Allow resultfunction to match on both enter and return!
 
   if (!edge.enterFunc.empty() || !edge.assumResFunc.empty()) {
     if (edge.enterFunc != "main" ||
