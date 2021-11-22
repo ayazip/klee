@@ -295,10 +295,14 @@ void WitnessAutomaton::remove_sink_states() {
     while (!q.empty()) {
         node_ptr n = q.front();
         visited.insert(n);
+        std::set<edge_ptr> remove;
         for (edge_ptr e : n->edges) {
 
+            // TODO: Fix tree pruning
             if (non_sink.find(e->target.lock()) == non_sink.end()) {
-              cut_branch(e);
+            //  cut_branch(e);
+                remove.insert(e);
+            //  klee::klee_warning("Cut edge");
               continue;
             }
 
@@ -329,6 +333,9 @@ void WitnessAutomaton::remove_sink_states() {
 
         }
         q.pop();
+        for (auto e : remove) {
+            n->edges.erase(e);
+        }
     }
     if (!no_replay)
         replay_nondets = replay;
@@ -358,10 +365,9 @@ void WitnessAutomaton::cut_branch(edge_ptr edge) {
     }
     std::set<node_ptr> deadnodes;
     free_subtree(n, deadnodes);
-    for (auto dead : deadnodes) {
-        nodes.erase(dead->id);
-    }
-    edge->source.lock()->edges.erase(edge);
+    //for (auto dead : deadnodes) {
+    //    nodes.erase(dead->id);
+    //}
 }
 
 /* Parse assumption, return substring containing result value */
@@ -394,9 +400,6 @@ klee::ConcreteValue create_concrete_v(std::string function, std::string val, boo
         if (end == val.size())
             ok = true;
     }
-    // TODO: if starts with number and contains . and double -> get double
-    //                --         ||       --      and float  -> get float
-    //        create APFloat / APDouble and bitcast to APInt
 
     if (function == "__VERIFIER_nondet_int")
         return klee::ConcreteValue(klee::Expr::Int32, value, true);
