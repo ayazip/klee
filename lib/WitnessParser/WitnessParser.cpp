@@ -300,7 +300,7 @@ void WitnessAutomaton::remove_sink_states() {
 
             // TODO: Fix tree pruning
             if (non_sink.find(e->target.lock()) == non_sink.end()) {
-            //  cut_branch(e);
+                cut_branch(e);
                 remove.insert(e);
             //  klee::klee_warning("Cut edge");
               continue;
