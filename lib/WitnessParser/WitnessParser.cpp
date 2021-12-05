@@ -240,11 +240,12 @@ void WitnessAutomaton::load_spec(const std::string& str){
     if (str.find("valid-memcleanup") != std::string::npos)
         data.spec.insert(WitnessSpec::valid_memcleanup);
 
-    /* SV-COMP only
+    /* SV-COMP only */
     if (str.find("reach_error") != std::string::npos) {
         data.err_function = "reach_error";
         data.spec.insert(WitnessSpec::unreach_call);
-    }*/
+    }
+    /*
     size_t pos;
     if ((pos = str.find("G ! call(")) != std::string::npos) {
         pos += 9;
@@ -263,6 +264,7 @@ void WitnessAutomaton::load_spec(const std::string& str){
         }
 
     }
+    */
     if (str.find("! overflow") != std::string::npos)
         data.spec.insert(WitnessSpec::overflow);
 }
