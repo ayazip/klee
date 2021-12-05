@@ -21,7 +21,7 @@ void print_err_invalid(const std::string& val, const char* attr) {
                      val.c_str(), attr);
 }
 
-// true on success (including missing attr), false on parse error
+// Set attr value according to the string str
 void set_bool_val(const char* str, const char* attr_name, bool& attr) {
     if (strcmp(str, "") == 0)
         return;
@@ -34,6 +34,7 @@ void set_bool_val(const char* str, const char* attr_name, bool& attr) {
     print_err_invalid(str, attr_name);
 }
 
+// Parse data nodes of element graph and load into the automaton
 void WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
     rapidxml::xml_node<> *data_node = root->first_node("data");
     char * attr;
@@ -72,9 +73,9 @@ void WitnessAutomaton::fill_data(rapidxml::xml_node<>* root) {
     if (data.spec.empty()) {
         klee::klee_error("Parsing failed: Invalid or missing witness specification");
     }
-    // if anything missing err
 }
 
+// Add nodes to the automaton
 void WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
     rapidxml::xml_node<> *child = root->first_node("node");
     std::string id;
@@ -110,6 +111,7 @@ void WitnessAutomaton::fill_nodes(rapidxml::xml_node<> *root) {
 
 }
 
+// Parse data nodes of element node and load into the automaton node
 void WitnessAutomaton::fill_node_data(rapidxml::xml_node<> *xml_node, node_ptr node) {
     rapidxml::xml_node<> *data_node =xml_node->first_node("data");
     char *attr;
@@ -127,6 +129,7 @@ void WitnessAutomaton::fill_node_data(rapidxml::xml_node<> *xml_node, node_ptr n
     }
 }
 
+// Add edges to the automaton
 void WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
     rapidxml::xml_node<> *child = root->first_node("edge");
     std::string src_id;
@@ -154,6 +157,7 @@ void WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
     }
 }
 
+// Parse data nodes of element edge and load into the automaton edge
 void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge) {
     rapidxml::xml_node<> *data_node =xml_node->first_node("data");
     char * attr;
@@ -199,7 +203,7 @@ void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
     }
 }
 
-
+// Load the file and build the automaton
 void WitnessAutomaton::load (const char* filename){
     std::ifstream ifs(filename);
     if (!ifs.good()) {
@@ -225,7 +229,7 @@ void WitnessAutomaton::load (const char* filename){
     remove_sink_states();
 }
 
-
+// Get the necessary info out of the specification
 void WitnessAutomaton::load_spec(const std::string& str){
     if (str.find("valid-free") != std::string::npos)
         data.spec.insert(WitnessSpec::valid_free);
@@ -235,10 +239,29 @@ void WitnessAutomaton::load_spec(const std::string& str){
         data.spec.insert(WitnessSpec::valid_memtrack);
     if (str.find("valid-memcleanup") != std::string::npos)
         data.spec.insert(WitnessSpec::valid_memcleanup);
-    /** TODO: Other error functions!!!! **/
+
+    /* SV-COMP only
     if (str.find("reach_error") != std::string::npos) {
         data.err_function = "reach_error";
         data.spec.insert(WitnessSpec::unreach_call);
+    }*/
+    size_t pos;
+    if ((pos = str.find("G ! call(")) != std::string::npos) {
+        pos += 9;
+        while (pos < str.size() && (str[pos] == '(' || str[pos] == ' '))
+          pos++;
+        size_t len = 0;
+        while (pos+len < str.size() && !(str[pos+len] == '(' ||
+                                         str[pos+len] == ' ' ||
+                                         str[pos+len] == ')' ))
+            len++;
+        if (len != 0) {
+            data.err_function = str.substr(pos, len);
+            data.spec.insert(WitnessSpec::unreach_call);
+        } else {
+            klee::klee_error("Invalid specification: missing error function");
+        }
+
     }
     if (str.find("! overflow") != std::string::npos)
         data.spec.insert(WitnessSpec::overflow);
