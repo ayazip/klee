@@ -1264,9 +1264,6 @@ Executor::toConstant(ExecutionState &state,
   (void) success;
   klee_warning("unsupported symbolic type: %s", reason);
 
-  // Don't allow silent concretization of floats when witness checking
-  if (strcmp(reason, "floating point") == 0)
-      haltExecution = true;
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
@@ -5152,41 +5149,45 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
       !(line == startline || (line > edge.startline && line <= edge.endline)))
     return false;
 
-
-  if (!edge.retFromFunc.empty()) {
-    if (ki->inst->getOpcode() != Instruction::Ret)
-      return false;
-    ReturnInst *ri = cast<ReturnInst>(ki->inst);
-    std::string fName = ri->getFunction()->getName();
-    if (fName != edge.retFromFunc)
-      return false;
-  }
-
-  if (!edge.enterFunc.empty() || !edge.assumResFunc.empty()) {
-    if (edge.enterFunc != "main" ||
-        state.steppedInstructions > 1) {
-      if (ki->inst->getOpcode() != Instruction::Call)
-        return false;
-          CallInst *ci = cast<CallInst>(ki->inst);
-          CallSite cs(ci);
-          Value *fp = cs.getCalledValue();
-          Function *f = getTargetFunction(fp, state);
-          if (f != nullptr && (edge.enterFunc.empty() ||
-                               f->getName() != edge.enterFunc)
-                           && (edge.assumResFunc.empty() ||
-                               f->getName() != edge.assumResFunc))
-            return false;
-      }
-    }
-
   if (!edge.control.empty() && ki->inst->getOpcode() != Instruction::Br)
     return false;
 
-  if (!edge.assumResFunc.empty() &&
-      edge.assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
-    state.replayEdges.push(edge);
-    assert(!state.replayEdges.empty());
-    return false;
+  std::string fun = "";
+  if (ki->inst->getOpcode() == Instruction::Ret) {
+      ReturnInst *ri = cast<ReturnInst>(ki->inst);
+      fun = ri->getFunction()->getName();
+  }
+
+  if (ki->inst->getOpcode() == Instruction::Call) {
+      CallInst *ci = cast<CallInst>(ki->inst);
+      CallSite cs(ci);
+      Value *fp = cs.getCalledValue();
+      Function *f = getTargetFunction(fp, state);
+      if (f != nullptr)
+          fun = f->getName();
+  }
+
+  if (!edge.retFromFunc.empty()) {
+    if (ki->inst->getOpcode() != Instruction::Ret || fun != edge.retFromFunc)
+      return false;
+  }
+
+  if (!edge.enterFunc.empty()) {
+    if (edge.enterFunc != "main" || state.steppedInstructions > 1) {
+      if (ki->inst->getOpcode() != Instruction::Call ||
+              fun != edge.enterFunc)
+        return false;
+    }
+  }
+
+  if (!edge.assumResFunc.empty()){
+    if (fun != edge.assumResFunc)
+      return false;
+    if (edge.assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
+      state.replayEdges.push(edge);
+      assert(!state.replayEdges.empty());
+      return false;
+    }
   }
   return true;
 }
