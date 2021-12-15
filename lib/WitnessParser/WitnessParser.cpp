@@ -316,57 +316,60 @@ void WitnessAutomaton::remove_sink_states() {
     std::set<node_ptr> visited;
 
     while (!q.empty()) {
-        node_ptr n = q.front();
-        visited.insert(n);
-        std::set<edge_ptr> remove;
-        for (edge_ptr e : n->edges) {
+      node_ptr n = q.front();
+      visited.insert(n);
+      std::set<edge_ptr> remove;
+      for (edge_ptr e : n->edges) {
 
-            // TODO: Fix tree pruning
-            if (non_sink.find(e->target.lock()) == non_sink.end()) {
-                cut_branch(e);
-                remove.insert(e);
-            //  klee::klee_warning("Cut edge");
+        if (non_sink.find(e->target.lock()) == non_sink.end()) {
+          cut_branch(e);
+          remove.insert(e);
+          // klee::klee_warning("Cut edge");
+          continue;
+        }
+
+        if (visited.find(e->target.lock()) != visited.end()) {
+          no_replay = true;
+          continue;
+        }
+
+        q.push(e->target.lock());
+
+        if (!no_replay && /* e->startline != 0 && */
+             e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
+          std::string value_string = get_result_string(e->assumption);
+          if (value_string.empty()) {
+              klee::klee_warning("Parsing: Ignoring "
+                                 "assumption.resultfuntion: "
+                                 "invalid format");
               continue;
-            }
-
-            if (visited.find(e->target.lock()) == visited.end()) {
-              q.push(e->target.lock());
-
-              if (!no_replay && /* e->startline != 0 && */
-                  e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
-                std::string value_string = get_result_string(e->assumption);
-                if (value_string.empty()) {
-                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    continue;
-                }
-                bool ok;
-                auto value = create_concrete_v(e->assumResFunc, value_string, ok);
-                if (!ok) {
-                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    continue;
-                }
-                replay.emplace_back(value);
-                e->result_index = replay.size() - 1;
-              }
-
-            }
-            else {
-              no_replay = true;
-            }
-
+          }
+          bool ok;
+          auto value = create_concrete_v(e->assumResFunc,
+                                           value_string, ok);
+          if (!ok) {
+              klee::klee_warning("Parsing: Ignoring "
+                                 "assumption.resultfuntion: "
+                                 "invalid format");
+              continue;
+          }
+          replay.emplace_back(value);
+          e->result_index = replay.size() - 1;
         }
-        q.pop();
-        for (auto e : remove) {
-            n->edges.erase(e);
-        }
+      }
+      q.pop();
+      for (auto e : remove) {
+        n->edges.erase(e);
+      }
     }
     if (!no_replay)
-        replay_nondets = replay;
+      replay_nondets = replay;
 }
 
 
-/* Correctly discard subgraph starting from given entry node */
-void WitnessAutomaton::free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes) {
+/* Discard subgraph starting from given entry node */
+void WitnessAutomaton::free_subtree(node_ptr entry,
+                                    std::set<node_ptr>& deadnodes) {
     deadnodes.emplace(entry);
     if (entry->edges.empty())
         return;
@@ -414,7 +417,8 @@ std::string get_result_string(std::string assumption) {
 }
 
 
-klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok) {
+klee::ConcreteValue create_concrete_v(std::string function,
+                                      std::string val, bool& ok) {
     ok = false;
     int64_t value = 0;
     if (isdigit(val[0]) || val[0] == '-') {
