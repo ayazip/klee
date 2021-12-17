@@ -1016,14 +1016,15 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
     if (edge.assumResFunc == name &&
       (edge.startline == info->line || edge.startline == 0)) {
       if (edge.result_index == -1) {
-          klee_warning("Unable to get concrete value for: %s:%lu, using using nondet",
+          klee_warning("Unable to get concrete value for: %s:%lu, using nondet",
                        edge.assumResFunc.c_str(),edge.startline);
 
           executor.bindLocal(target, state,
                             executor.createNondetValue(state, size,
                                                        isSigned, target, name));
       } else {
-          // TODO: ConstantsExpr::alloca in witness parsing, instead of ConcreteValue
+          // TODO: ConstantsExpr::alloca in witness parsing, instead of
+          // ConcreteValue
          auto& val = executor.witness.replay_nondets[edge.result_index];
 
         if (name == "__VERIFIER_nondet_double") {
