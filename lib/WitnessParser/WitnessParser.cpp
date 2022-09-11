@@ -226,7 +226,7 @@ void WitnessAutomaton::load (const char* filename){
     fill_data(root);
     fill_nodes(root);
     fill_edges(root);
-    remove_sink_states();
+    fill_replay();
 }
 
 // Get the necessary info out of the specification
@@ -274,43 +274,9 @@ bool WitnessAutomaton::get_spec(WitnessSpec s){
 
 }
 
-// Returns a set of nodes, from which the given node is reachable.
-// Sets the "multiple" argument to true, if there are multiple paths
-// from the entry to the given node, false otherwise.
-std::set<node_ptr> reverse_reachable(const node_ptr node, bool& multiple) {
-    std::set<node_ptr> reached;
-    std::queue<std::weak_ptr<WitnessNode>> q;
-    reached.insert(node);
-    q.push(node);
-    multiple = false;
 
-    while (!q.empty()) {
-        std::weak_ptr<WitnessNode> n = q.front();
-        for (edge_ptr e : n.lock()->edges_in) {
-            if (reached.find(e->source.lock()) != reached.end())
-                multiple = true;
-            else {
-                q.push(e->source);
-                reached.emplace(e->source.lock());
-            }
-        }
-        q.pop();
-    }
-
-    return reached;
-
-}
-
-/* Remove sink states */
-void WitnessAutomaton::remove_sink_states() {
-    bool no_replay = violation.size() > 1;
-    std::set<node_ptr> non_sink;
-
-    for (auto v_node : violation) {
-        std::set<node_ptr> r = reverse_reachable(v_node, no_replay);
-        non_sink.insert(r.begin(), r.end());
-    }
-
+/* Fill nondet_* function return values provided by the witness */
+void WitnessAutomaton::fill_replay() {
     std::vector<klee::ConcreteValue> replay;
 
     std::queue<node_ptr> q;
@@ -323,19 +289,9 @@ void WitnessAutomaton::remove_sink_states() {
         std::set<edge_ptr> remove;
         for (edge_ptr e : n->edges) {
 
-            // TODO: Fix tree pruning
-            if (non_sink.find(e->target.lock()) == non_sink.end()) {
-                cut_branch(e);
-                remove.insert(e);
-            //  klee::klee_warning("Cut edge");
-              continue;
-            }
-
-            if (visited.find(e->target.lock()) == visited.end()) {
               q.push(e->target.lock());
 
-              if (!no_replay && /* e->startline != 0 && */
-                  e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
+              if (e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
                 std::string value_string = get_result_string(e->assumption);
                 if (value_string.empty()) {
                     klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
@@ -352,48 +308,11 @@ void WitnessAutomaton::remove_sink_states() {
               }
 
             }
-            else {
-              no_replay = true;
-            }
-
-        }
         q.pop();
-        for (auto e : remove) {
-            n->edges.erase(e);
-        }
     }
-    if (!no_replay)
-        replay_nondets = replay;
+
 }
 
-
-/* Correctly discard subgraph starting from given entry node */
-void WitnessAutomaton::free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes) {
-    deadnodes.emplace(entry);
-    if (entry->edges.empty())
-        return;
-    for (auto e : entry->edges) {
-        if (deadnodes.find(e->target.lock()) == deadnodes.end())
-            free_subtree(e->target.lock(), deadnodes);
-        entry->edges.erase(e);
-        entry->edges_in.erase(e);
-        edges.erase(e);
-    }
-}
-
-/* Remove everything after this edge from the automaton */
-void WitnessAutomaton::cut_branch(edge_ptr edge) {
-    node_ptr n = edge->target.lock();
-    if (n == nullptr){
-        edge->source.lock()->edges.erase(edge);
-        return;
-    }
-    std::set<node_ptr> deadnodes;
-    free_subtree(n, deadnodes);
-    //for (auto dead : deadnodes) {
-    //    nodes.erase(dead->id);
-    //}
-}
 
 /* Parse assumption, return substring containing result value */
 std::string get_result_string(std::string assumption) {

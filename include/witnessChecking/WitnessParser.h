@@ -82,9 +82,8 @@ class WitnessAutomaton {
     void fill_node_data (rapidxml::xml_node<>* xml_node, node_ptr node);
     void fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge);
     void load_spec(const std::string& str);
-    void remove_sink_states();
-    void free_subtree(node_ptr entry, std::set<node_ptr>& deadnodes);
-    void cut_branch(edge_ptr edge);
+    void fill_replay();
+
 
 
 public:
