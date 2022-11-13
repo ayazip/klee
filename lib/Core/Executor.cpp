@@ -90,6 +90,9 @@ namespace klee {
 cl::OptionCategory DebugCat("Debugging options",
                             "These are debugging options.");
 
+cl::OptionCategory WitnessCat("Witness validator options",
+                            "Options for witness validation");
+
 cl::OptionCategory ExtCallsCat("External call policy options",
                                "These options impact external calls.");
 
@@ -111,6 +114,13 @@ cl::opt<std::string> MaxTime(
              "Set to 0s to disable (default=0s)"),
     cl::init("0s"),
     cl::cat(TerminationCat));
+
+cl::opt<bool> WitnessRefutation(
+    "refute-witness",
+    cl::desc("Print \"true\" is the violation witness is not validated."),
+    cl::init(true),
+    cl::cat(WitnessCat));
+
 } // namespace klee
 
 namespace {
@@ -1371,6 +1381,51 @@ void Executor::printDebugInstructions(ExecutionState &state) {
   }
 }
 
+
+void Executor::stepWitness(ExecutionState &state, KInstruction *ki){
+    bool replay = false;
+    std::string fun;
+    if (ki->inst->getOpcode() == Instruction::Call) {
+        fun = getCallFunName(state, ki);
+        if (fun.compare(0, 17, "__VERIFIER_nondet") == 0)
+            replay = true;
+    }
+
+    if (state.witnessNode.size() != witness.get_nodes_number()) {
+        for (auto node : state.witnessNode) {
+
+          bool progress = false;
+          for (auto edge : node.edges) {
+              WitnessNode target = *(edge->target.lock());
+              if (state.witnessNode.find(target) != state.witnessNode.end() ||
+                  state.witnessNodeNext.find(target) != state.witnessNodeNext.end())
+                  continue;
+              if (matchEdge(*edge, ki, state)) {
+                  state.witnessNodeNext.emplace(target);
+              }
+          }
+
+          if (replay)
+              for (auto edge : node.replayEdges) {
+                  if (matchEdge(*edge, ki, state)) {
+                      progress = true;
+                      state.replayEdges.insert(edge);
+                  }
+              }
+
+          if (!progress) {
+              state.witnessNodeNext.emplace(node);
+          }
+        }
+
+    }
+
+    if (replay && !state.replayEdges.empty()) {
+        prepare_witness_replay(state);
+    }
+}
+
+
 void Executor::stepInstruction(ExecutionState &state) {
   printDebugInstructions(state);
   if (statsTracker)
@@ -1378,19 +1433,8 @@ void Executor::stepInstruction(ExecutionState &state) {
 
   KInstruction *ki = state.pc;
 
-  if (state.witnessNode.size() != witness.get_nodes_number()) {
-      for (auto node : state.witnessNode) {
-        for (auto edge : node.edges) {
+  stepWitness(state, ki);
 
-          WitnessNode target = *(edge->target.lock());
-          if (state.witnessNode.find(target) != state.witnessNode.end() ||
-              state.witnessNodeNext.find(target) != state.witnessNodeNext.end())
-                  continue;
-          if (matchEdge(*edge.get(), ki, state))
-            state.witnessNodeNext.emplace(target);
-          }
-      }
-  }
   ++stats::instructions;
   ++state.steppedInstructions;
   state.prevPC = state.pc;
@@ -3198,8 +3242,10 @@ void Executor::run(ExecutionState &initialState) {
     if (::dumpStates) dumpStates();
     if (::dumpPTree) dumpPTree();
 
+    state.witnessNode.clear();
     state.witnessNode.insert(state.witnessNodeNext.begin(), state.witnessNodeNext.end());
     state.witnessNodeNext.clear();
+
 
     checkMemoryUsage();
 
@@ -5183,11 +5229,65 @@ bool Executor::matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionSta
   if (!edge.assumResFunc.empty()){
     if (fun != edge.assumResFunc)
       return false;
-    if (edge.assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
-      state.replayEdges.push(edge);
-      assert(!state.replayEdges.empty());
-      return false;
-    }
   }
   return true;
+}
+
+
+void Executor::prepare_witness_replay(ExecutionState& state){
+    assert(!state.replayEdges.empty());
+
+    //Find out if we need an extra state
+    if (!state.witnessNodeNext.empty()) {
+        ExecutionState *newState = new ExecutionState(state);
+        newState->coveredNew = false;
+        newState->coveredLines.clear();
+        newState->weight = 0.2 * state.weight;
+        state.weight *= 0.8;
+        newState->witnessNode = state.witnessNodeNext;
+        state.witnessNodeNext.clear();
+        newState->replayEdges.clear();
+        addedStates.push_back(newState);
+    }
+
+    state.witnessNodeNext.clear();
+    state.witnessNode.clear();
+
+    // Find out if we need to fork more
+    if (state.replayEdges.size() == 1) {
+        return;
+    }
+
+    auto succ = *(state.replayEdges.begin());
+
+    state.replayEdges.erase(state.replayEdges.begin());
+
+
+
+    for (auto edge : state.replayEdges) {
+        ExecutionState *newState = new ExecutionState(state);
+        newState->coveredNew = false;
+        newState->coveredLines.clear();
+        newState->weight = state.weight / state.replayEdges.size();
+        newState->replayEdges.clear();
+        newState->replayEdges.insert(edge);
+        addedStates.push_back(newState);
+    }
+
+    state.weight = state.weight / state.replayEdges.size();
+    state.replayEdges.clear();
+    state.replayEdges.insert(succ);
+
+}
+
+std::string Executor::getCallFunName(ExecutionState state, KInstruction *ki) {
+    assert(ki->inst->getOpcode() == Instruction::Call);
+    std::string fun = "";
+    CallInst *ci = cast<CallInst>(ki->inst);
+    CallSite cs(ci);
+    Value *fp = cs.getCalledValue();
+    Function *f = getTargetFunction(fp, state);
+    if (f != nullptr)
+        fun = f->getName();
+    return fun;
 }

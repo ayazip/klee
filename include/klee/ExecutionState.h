@@ -235,7 +235,7 @@ public:
   std::set<WitnessNode> witnessNodeNext;
 
   /// @brief Edges with possible replay values
-  std::queue<WitnessEdge> replayEdges;
+  std::set<edge_ptr> replayEdges;
 
   NondetValue& addNondetValue(const KValue& val, bool isSigned, const std::string& name);
 

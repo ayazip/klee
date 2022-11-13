@@ -3,6 +3,8 @@
 #include <cstring>
 #include <string>
 #include <queue>
+#include <utility>
+
 
 #include "klee/ConcreteValue.h"
 #include "klee/Expr/Expr.h"
@@ -149,8 +151,13 @@ void WitnessAutomaton::fill_edges(rapidxml::xml_node<>* root) {
         edge.get()->target = nodes[tar_id];
         fill_edge_data(child, edge);
 
-        nodes[src_id].get()->edges.emplace(edge);
-        nodes[tar_id].get()->edges_in.emplace(edge);
+        //nodes[tar_id].get()->edges_in.emplace(edge);
+         if (edge->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0)
+            nodes[src_id]->replayEdges.emplace(edge);
+         else
+            nodes[src_id].get()->edges.emplace(edge);
+
+
         edges.emplace(edge);
 
         child = child->next_sibling("edge");
@@ -226,7 +233,6 @@ void WitnessAutomaton::load (const char* filename){
     fill_data(root);
     fill_nodes(root);
     fill_edges(root);
-    fill_replay();
 }
 
 // Get the necessary info out of the specification
@@ -276,40 +282,20 @@ bool WitnessAutomaton::get_spec(WitnessSpec s){
 
 
 /* Fill nondet_* function return values provided by the witness */
-void WitnessAutomaton::fill_replay() {
-    std::vector<klee::ConcreteValue> replay;
-
-    std::queue<node_ptr> q;
-    q.push(this->entry);
-    std::set<node_ptr> visited;
-
-    while (!q.empty()) {
-        node_ptr n = q.front();
-        visited.insert(n);
-        std::set<edge_ptr> remove;
-        for (edge_ptr e : n->edges) {
-
-              q.push(e->target.lock());
-
-              if (e->assumResFunc.compare(0, 17, "__VERIFIER_nondet") == 0) {
-                std::string value_string = get_result_string(e->assumption);
-                if (value_string.empty()) {
-                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    continue;
-                }
-                bool ok;
-                auto value = create_concrete_v(e->assumResFunc, value_string, ok);
-                if (!ok) {
-                    klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
-                    continue;
-                }
-                replay.emplace_back(value);
-                e->result_index = replay.size() - 1;
-              }
-
-            }
-        q.pop();
+std::pair<bool, klee::ConcreteValue> fill_replay(WitnessEdge e) {
+    std::string value_string = get_result_string(e.assumption);
+    if (value_string.empty()) {
+        klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
+        // Hack, just returns zero.
+        return std::make_pair(false, klee::ConcreteValue(klee::Expr::Int32, 0, true));
     }
+
+    bool ok;
+    klee::ConcreteValue value = create_concrete_v(e.assumResFunc, value_string, ok);
+    if (!ok) {
+       klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
+    }
+    return std::make_pair(ok, value);
 
 }
 

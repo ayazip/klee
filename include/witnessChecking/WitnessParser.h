@@ -6,6 +6,8 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <tuple>
+
 
 #include "../../../rapidxml-1.13/rapidxml.hpp"
 
@@ -27,7 +29,9 @@ using edge_ptr = std::shared_ptr<WitnessEdge>;
 struct WitnessNode {
     std::string id;
     std::set<edge_ptr> edges;
-    std::set<edge_ptr> edges_in;
+    std::set<edge_ptr> replayEdges;
+
+    //std::set<edge_ptr> edges_in;
     bool entry;
     bool sink;
     bool violation;
@@ -82,7 +86,6 @@ class WitnessAutomaton {
     void fill_node_data (rapidxml::xml_node<>* xml_node, node_ptr node);
     void fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr edge);
     void load_spec(const std::string& str);
-    void fill_replay();
 
 
 
@@ -98,6 +101,8 @@ public:
 
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok);
 std::string get_result_string(std::string assumption);
+std::pair<bool, klee::ConcreteValue> fill_replay(WitnessEdge e);
+
 
 
 #endif // WITNESSPARSER_H

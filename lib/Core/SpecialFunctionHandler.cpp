@@ -1008,14 +1008,16 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
                                                       const std::string& name,
                                                       bool isPointer) {
 
-  if (!executor.witness.replay_nondets.empty() && !state.replayEdges.empty()) {
+  if (!state.replayEdges.empty()) {
 
-    WitnessEdge edge = state.replayEdges.front();
+    WitnessEdge edge = **(state.replayEdges.begin());
     auto *info = target->info;
 
     if (edge.assumResFunc == name &&
       (edge.startline == info->line || edge.startline == 0)) {
-      if (edge.result_index == -1) {
+      auto replay = fill_replay(edge);
+
+      if (!std::get<0>(replay)) {
           klee_warning("Unable to get concrete value for: %s:%lu, using using nondet",
                        edge.assumResFunc.c_str(),edge.startline);
 
@@ -1024,20 +1026,22 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
                                                        isSigned, target, name));
       } else {
           // TODO: ConstantsExpr::alloca in witness parsing, instead of ConcreteValue
-         auto& val = executor.witness.replay_nondets[edge.result_index];
+
 
         if (name == "__VERIFIER_nondet_double") {
           size_t end;
           double d_value = std::stod(get_result_string(edge.assumption), &end);
           llvm::APFloat ap_fvalue(d_value);
-          putConcreteValue(state, name, val.isSigned(), target,
+          putConcreteValue(state, name, isSigned, target,
                                ConstantExpr::alloc(ap_fvalue));
         }
-        else
-            putConcreteValue(state, name, val.isSigned(), target,
+        else {
+          auto val = std::get<1>(replay);
+          putConcreteValue(state, name, val.isSigned(), target,
                              ConstantExpr::alloc(val.getZExtValue(), size));
+          }
       }
-      state.replayEdges.pop();
+      state.replayEdges.clear();
       state.witnessNodeNext.emplace(*(edge.target.lock()));
     } else {
       klee_warning("Did not match nondet value for: %s:%lu, using using nondet value",

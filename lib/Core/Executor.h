@@ -578,7 +578,9 @@ public:
   int *getErrnoLocation(const ExecutionState &state) const;
 
   bool matchEdge(const WitnessEdge& edge, KInstruction *ki, ExecutionState& state);
-
+  void prepare_witness_replay(klee::ExecutionState&);
+  void stepWitness(ExecutionState& state, KInstruction *ki);
+  std::string getCallFunName(ExecutionState state, KInstruction *ki);
 
 };
   
