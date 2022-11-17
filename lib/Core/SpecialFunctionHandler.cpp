@@ -1030,7 +1030,7 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
 
         if (name == "__VERIFIER_nondet_double") {
           size_t end;
-          double d_value = std::stod(get_result_string(edge.assumption), &end);
+          double d_value = std::stod(edge.assumption, &end);
           llvm::APFloat ap_fvalue(d_value);
           putConcreteValue(state, name, isSigned, target,
                                ConstantExpr::alloc(ap_fvalue));

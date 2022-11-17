@@ -90,6 +90,7 @@ class WitnessAutomaton {
 
 
 public:
+    bool refute;
     std::vector<klee::ConcreteValue> replay_nondets;
     void load (const char* filename);
     std::set<WitnessSpec> get_spec() { return data.spec; }
@@ -100,7 +101,7 @@ public:
 };
 
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok);
-std::string get_result_string(std::string assumption);
+std::string parseAssumption(std::string assumption, bool& refute);
 std::pair<bool, klee::ConcreteValue> fill_replay(WitnessEdge e);
 
 

@@ -90,9 +90,6 @@ namespace klee {
 cl::OptionCategory DebugCat("Debugging options",
                             "These are debugging options.");
 
-cl::OptionCategory WitnessCat("Witness validator options",
-                            "Options for witness validation");
-
 cl::OptionCategory ExtCallsCat("External call policy options",
                                "These options impact external calls.");
 
@@ -115,11 +112,6 @@ cl::opt<std::string> MaxTime(
     cl::init("0s"),
     cl::cat(TerminationCat));
 
-cl::opt<bool> WitnessRefutation(
-    "refute-witness",
-    cl::desc("Print \"true\" is the violation witness is not validated."),
-    cl::init(true),
-    cl::cat(WitnessCat));
 
 } // namespace klee
 
@@ -1286,7 +1278,9 @@ Executor::toConstant(ExecutionState &state,
     klee_warning_once(reason, "%s", os.str().c_str());
 
   addConstraint(state, EqExpr::create(e, value));
-    
+
+  klee_message("Concretizing - witness refutation disabled.");
+  witness.refute = false;
   return value;
 }
 
@@ -1402,6 +1396,7 @@ void Executor::stepWitness(ExecutionState &state, KInstruction *ki){
                   continue;
               if (matchEdge(*edge, ki, state)) {
                   state.witnessNodeNext.emplace(target);
+                  progress = true;
               }
           }
 
@@ -1551,8 +1546,7 @@ void Executor::executeCall(ExecutionState &state,
   } else if (isErrorCall(f->getName())) {
       if (witness.get_spec(WitnessSpec::unreach_call) &&
           witness.get_err_function() == ErrorFun && state.inViolationNode()) {
-        klee_message("Valid violation witness: unreach-call");
-        haltExecution=true;
+        confirmWitness("Valid violation witness: unreach-call");
       }
       terminateStateOnError(state,
                             "ASSERTION FAIL: " + ErrorFun + " called",
@@ -3242,9 +3236,14 @@ void Executor::run(ExecutionState &initialState) {
     if (::dumpStates) dumpStates();
     if (::dumpPTree) dumpPTree();
 
+
+
     state.witnessNode.clear();
     state.witnessNode.insert(state.witnessNodeNext.begin(), state.witnessNodeNext.end());
     state.witnessNodeNext.clear();
+
+    if (state.witnessNode.size() == 0 && state.witnessNode.begin()->sink == true)
+        terminateStateEarly(state, "Terminating state: Witness exploration reached sink.");
 
 
     checkMemoryUsage();
@@ -3256,6 +3255,8 @@ void Executor::run(ExecutionState &initialState) {
   searcher = 0;
 
   doDumpStates();
+  if (witness.refute)
+      klee::klee_message("Witness unconfirmed.");
 }
 
 std::string Executor::getKValueInfo(ExecutionState &state,
@@ -3636,26 +3637,21 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &info) {
   if (state.inViolationNode()) {
     if (termReason == Free && witness.get_spec(WitnessSpec::valid_free)) {
-      klee_message("Valid violation witness: valid-free");
-      haltExecution=true;
+      confirmWitness("Valid violation witness: valid-free");
     }
     if ((termReason == Ptr || termReason == BadVectorAccess) &&
             witness.get_spec(WitnessSpec::valid_deref)) {
-      klee_message("Valid violation witness: valid-deref");
-      haltExecution=true;
+      confirmWitness("Valid violation witness: valid-deref");
     }
     if (termReason == Overflow && witness.get_spec(WitnessSpec::overflow)) {
-      klee_message("Valid violation witness: no-overflow");
-      haltExecution=true;
+      confirmWitness("Valid violation witness: no-overflow");
     }
     if (termReason == Leak) {
       if (witness.get_spec(WitnessSpec::valid_memtrack)) {
-        klee_message("Valid violation witness: valid-memtrack");
-        haltExecution=true;
+        confirmWitness("Valid violation witness: valid-memtrack");
       }
       if (witness.get_spec(WitnessSpec::valid_memcleanup)) {
-        klee_message("Valid violation witness: valid-memcleanup");
-        haltExecution=true;
+        confirmWitness("Valid violation witness: valid-memcleanup");
       }
     }
   }
@@ -3681,8 +3677,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
       }
 
       if (state.inViolationNode() && witness.get_spec(WitnessSpec::valid_memcleanup)) {
-              klee_message("Valid violation witness: valid-memcleanup");
-              haltExecution=true;
+              confirmWitness("Valid violation witness: valid-memcleanup");
       }
       if (shouldExitOn(Executor::Leak))
         haltExecution = true;
@@ -5290,4 +5285,11 @@ std::string Executor::getCallFunName(ExecutionState state, KInstruction *ki) {
     if (f != nullptr)
         fun = f->getName();
     return fun;
+}
+
+
+void Executor::confirmWitness(const char* message) {
+    klee_message("Valid violation witness: %s", message);
+    haltExecution=true;
+    witness.refute=false;
 }

@@ -10,8 +10,18 @@
 #include "klee/Expr/Expr.h"
 #include "witnessChecking/WitnessParser.h"
 #include "klee/Internal/Support/ErrorHandling.h"
+#include "llvm/Support/CommandLine.h"
 
+namespace klee {
+llvm::cl::OptionCategory WitnessCat("Witness validator options",
+                            "Options for witness validation");
 
+llvm::cl::opt<bool> RefuteWitness(
+    "refute-witness",
+    llvm::cl::desc("Print \"Witness not validated.\" if the decribed error cannot be found."),
+    llvm::cl::init(true),
+    llvm::cl::cat(WitnessCat));
+};
 
 
 void rapidxml::parse_error_handler(const char *what, void *where) {
@@ -191,9 +201,17 @@ void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
         }
         else if (strcmp(attr, "startoffset") == 0) {
             edge.get()->startoffset = std::strtol(data_node->value(), nullptr, 10);
+            if (refute) {
+                klee::klee_message("Using unsupported atttribute, witness refutation disabled.");
+                refute = false;
+            }
         }
         else if (strcmp(attr, "endoffset") == 0) {
             edge.get()->endoffset = std::strtol(data_node->value(), nullptr, 10);
+            if (refute) {
+                klee::klee_message("Using unsupported atttribute, witness refutation disabled.");
+                refute = false;
+            }
         }
         else if (strcmp(attr, "enterLoopHead") == 0) {
             set_bool_val(data_node->value(), "enterLoopHead", edge->enterLoop);
@@ -208,6 +226,7 @@ void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
         //}
         data_node = data_node->next_sibling("data");
     }
+    edge->assumption = parseAssumption(edge->assumption, refute);
 }
 
 // Load the file and build the automaton
@@ -233,6 +252,8 @@ void WitnessAutomaton::load (const char* filename){
     fill_data(root);
     fill_nodes(root);
     fill_edges(root);
+
+    refute = klee::RefuteWitness;
 }
 
 // Get the necessary info out of the specification
@@ -283,7 +304,7 @@ bool WitnessAutomaton::get_spec(WitnessSpec s){
 
 /* Fill nondet_* function return values provided by the witness */
 std::pair<bool, klee::ConcreteValue> fill_replay(WitnessEdge e) {
-    std::string value_string = get_result_string(e.assumption);
+    std::string value_string = e.assumption;
     if (value_string.empty()) {
         klee::klee_warning("Parsing: Ignoring assumption.resultfuntion: invalid format");
         // Hack, just returns zero.
@@ -301,12 +322,13 @@ std::pair<bool, klee::ConcreteValue> fill_replay(WitnessEdge e) {
 
 
 /* Parse assumption, return substring containing result value */
-std::string get_result_string(std::string assumption) {
+std::string parseAssumption(std::string assumption, bool &refute) {
 
-    size_t start = assumption.find("\\result");
-    if (start == std::string::npos)
+    size_t start0 = assumption.find("\\result");
+
+    if (start0 == std::string::npos)
         return std::string();
-    start = assumption.find("==", start) + 2;
+    size_t start = assumption.find("==", start0) + 2;
     if (start == std::string::npos)
         return std::string();
 
@@ -317,9 +339,19 @@ std::string get_result_string(std::string assumption) {
     while (start+len < assumption.size() && assumption[start+len] != ';'
            && assumption[start+len] != ' ' && assumption[start+len] != ')')
         len++;
+
+    if (refute) {
+        for (char c : assumption.substr(0, start0) +
+             assumption.substr(start + len, std::string::npos))
+            if (!std::isspace(c) && !(c == ';')){
+                refute = false;
+                klee::klee_message("Using unsupported assumptions, witness refutation disabled.");
+                break;
+            }
+        }
+
     return assumption.substr(start, len);
 }
-
 
 klee::ConcreteValue create_concrete_v(std::string function, std::string val, bool& ok) {
     ok = false;
