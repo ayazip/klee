@@ -1297,6 +1297,11 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
        //    // getopt is fatal, we really cannot handle that
        //    klee_error("Unhandled getopt stuff");
        //}
+
+        if (!it->second && (ext == "fcanf" || ext == "__isoc99_fscanf" || ext == "socket")) {
+        //    // getopt is fatal, we really cannot handle that
+            klee_error("Unhandled impure functions");
+        }
       }
     }
   }
