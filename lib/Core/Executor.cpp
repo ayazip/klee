@@ -1380,6 +1380,13 @@ void Executor::stepWitness(ExecutionState &state, KInstruction *ki){
     bool replay = false;
     std::string fun;
     if (ki->inst->getOpcode() == Instruction::Call) {
+        // Ignore debug intrinsic calls?
+        // if (isa<DbgInfoIntrinsic>(ki->inst)) {
+        //    state.witnessNodeNext.insert(state.witnessNode.begin(), state.witnessNode.end());
+        //    state.witnessNode.clear();
+        //    return;
+        //}
+
         fun = getCallFunName(state, ki);
         if (fun.compare(0, 17, "__VERIFIER_nondet") == 0)
             replay = true;
