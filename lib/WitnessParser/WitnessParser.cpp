@@ -226,11 +226,22 @@ void WitnessAutomaton::fill_edge_data (rapidxml::xml_node<>* xml_node, edge_ptr 
         //}
         data_node = data_node->next_sibling("data");
     }
-    edge->assumption = parseAssumption(edge->assumption, refute);
+    if (!edge->assumResFunc.empty()) {
+        if (!edge->assumption.empty())
+            edge->assumption = parseAssumption(edge->assumption, refute);
+    }
+    else {
+        if (refute && edge->source.lock()->edges.size() > 1) {
+            klee::klee_message("Using unsupported assumptions, witness refutation disabled.");
+            refute = false;
+        }
+
+    }
 }
 
 // Load the file and build the automaton
 void WitnessAutomaton::load (const char* filename){
+    refute = klee::RefuteWitness;
     std::ifstream ifs(filename);
     if (!ifs.good()) {
         klee::klee_error("Parsing failed: Can not load file");
@@ -253,7 +264,7 @@ void WitnessAutomaton::load (const char* filename){
     fill_nodes(root);
     fill_edges(root);
 
-    refute = klee::RefuteWitness;
+
 }
 
 // Get the necessary info out of the specification
