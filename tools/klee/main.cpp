@@ -1138,6 +1138,7 @@ static const char *modelledExternals[] = {
   "__VERIFIER_assume",
   "pthread_create",
   "pthread_join",
+  "__VERIFER_error_overflow",
 };
 
 // Symbols we aren't going to warn about

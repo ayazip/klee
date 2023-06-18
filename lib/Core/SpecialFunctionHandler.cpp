@@ -85,6 +85,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   addDNR("klee_abort", handleAbort),
   addDNR("klee_silent_exit", handleSilentExit),
   addDNR("klee_report_error", handleReportError),
+  addDNR("__VERIFIER_error_overflow", handleOverflowError),
   add("calloc", handleCalloc, true),
   add("free", handleFree, false),
   add("klee_assume", handleAssume, false),
@@ -372,6 +373,12 @@ void SpecialFunctionHandler::handleReportError(ExecutionState &state,
 				 readStringAtAddress(state, arguments[2]),
 				 Executor::ReportError,
 				 readStringAtAddress(state, arguments[3]).c_str());
+}
+
+void SpecialFunctionHandler::handleOverflowError(ExecutionState &state,
+                           KInstruction *target,
+                           const std::vector<Cell> &arguments) {
+  executor.terminateStateOnError(state, "found overflow", Executor::Overflow);
 }
 
 void SpecialFunctionHandler::handleOpenMerge(ExecutionState &state,
