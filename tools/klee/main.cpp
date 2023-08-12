@@ -23,6 +23,7 @@
 #include "klee/Support/ModuleUtil.h"
 #include "klee/Support/PrintVersion.h"
 #include "klee/System/Time.h"
+#include "klee/Witness/Witness.h"
 
 // FIXME: this is a hack
 #include "../lib/Core/ExecutionState.h"
@@ -68,7 +69,10 @@ using namespace klee;
 
 namespace {
   cl::opt<std::string>
-  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
+  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"), cl::Required);
+
+  cl::opt<std::string>
+  WitnessFile(cl::Positional, cl::desc("<witness file>"), cl::Required);
 
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter,

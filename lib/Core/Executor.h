@@ -28,6 +28,8 @@
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
 #include "klee/System/Time.h"
+#include "klee/Witness/Witness.h"
+
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/InstrTypes.h"
@@ -119,6 +121,7 @@ private:
   TimerGroup timers;
   std::unique_ptr<PTree> processTree;
   std::tuple<std::string, unsigned, unsigned> errorLoc;
+  std::vector<Witness::Segment> witness;
 
   /// Used to track states that have been added during the current
   /// instructions step. 
