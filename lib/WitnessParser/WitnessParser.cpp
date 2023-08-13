@@ -1,11 +1,14 @@
 #include <iostream>
 #include "yaml-cpp/yaml.h"
 #include <vector>
+#include <set>
 #include <string>
 #include <fstream>
 #include <cassert>
 
 #include "klee/Witness/Witness.h"
+#include "llvm/IR/Instructions.h"
+
 
 
 Witness::Type parse_type(YAML::Node yaml_waypoint){
@@ -18,7 +21,7 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
     if (yaml_waypoint["type"].as<std::string>() == "function_return")
         return Witness::Type::Return;
     if (yaml_waypoint["type"].as<std::string>() == "identifier_evaluation")
-        return Witness::Type::Eval;
+        return Witness::Type::Enter;
     return Witness::Type::Undefined;
 
 }
@@ -99,4 +102,62 @@ std::vector<Witness::Segment> parse(std::string filename) {
 
     return witness;
 }
+
+std::set<int> Witness::Segment::check_avoid(const klee::KInstruction &ki){
+    std::set<int> matched;
+
+    for (size_t i=0; i<avoid.size(); i++) {
+        if (avoid[i].match(ki))
+           matched.insert(i);
+    }
+    return matched;
+}
+
+
+bool Witness::Location::match(const klee::KInstruction &ki) {
+    return (ki.info->line == line
+        && (!column || ki.info->column == column)
+        && (filename == ki.info->file));
+}
+
+
+bool Witness::Waypoint::match(const klee::KInstruction &ki) {
+
+    if (!loc.match(ki))
+        return false;
+
+    switch (type) {
+
+    case Witness::Type::Branch:
+        return (ki.inst->getOpcode() == llvm::Instruction::Br);
+
+    case Witness::Type::Enter:
+        if (ki.inst->getOpcode() != llvm::Instruction::Call)
+            return false;
+        if (!loc.identifier.empty()) {
+
+            const llvm::CallBase &cs = llvm::cast<llvm::CallBase>(*ki.inst);
+            llvm::Function *f = cs.getCalledFunction();
+            if (f != nullptr) {
+                std::string name = f->getName();
+                return (loc.identifier == name);
+            }
+        }
+        return true;
+
+    case Witness::Type::Return:
+        return (ki.inst->getOpcode() == llvm::Instruction::Ret);
+         //if (loc.identifier && (cast<ReturnInst>(ki->inst))->getFunction()->getName()) {
+         //   break;
+
+    case Witness::Type::Assume:
+        return false;
+
+    default:
+        std::cout << "Invalid waypoint type!\n";
+        return false;
+    }
+
+}
+
 

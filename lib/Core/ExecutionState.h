@@ -318,6 +318,9 @@ public:
   /// @brief Disables forking for this state. Set by user code
   bool forkDisabled = false;
 
+  ///@brief Tracks the current segment in the witness
+  int segment = 0;
+
 public:
 #ifdef KLEE_UNITTEST
   // provide this function only in the context of unittests
