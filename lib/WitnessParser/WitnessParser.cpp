@@ -40,7 +40,7 @@ Witness::Location parse_location(YAML::Node yaml_waypoint){
 
 }
 
-std::vector<Witness::Segment> parse(std::string filename) {
+Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
     std::ifstream ifs(filename);
     std::string content( (std::istreambuf_iterator<char>(ifs) ),
@@ -53,19 +53,19 @@ std::vector<Witness::Segment> parse(std::string filename) {
 
     YAML::Node sequence = node[0]["content"];
 
-    std::vector<Witness::Segment> witness;
+    std::vector<Segment> witness;
     assert(sequence.Type() == YAML::NodeType::Sequence);
 
     for (std::size_t i=0; i<sequence.size(); i++) {
         YAML::Node yaml_segment = sequence[i]["segment"];
         assert(yaml_segment.Type() == YAML::NodeType::Sequence);
 
-        Witness::Segment segment;
+        Segment segment;
 
         for (std::size_t j=0; j<yaml_segment.size(); j++) {
 
             YAML::Node yaml_waypoint = yaml_segment[j]["waypoint"];
-            Witness::Waypoint waypoint;
+            Waypoint waypoint;
 
             waypoint.loc = parse_location(yaml_waypoint);
 
@@ -100,7 +100,15 @@ std::vector<Witness::Segment> parse(std::string filename) {
 
     }
 
-    return witness;
+    ErrorWitness ew;
+    ew.witness = witness;
+
+    std::string specification = node[0]["metadata"]["task"]["specification"].as<std::string>();
+    ew.property = get_property(specification);
+
+    if (ew.property == Property::unreach_call)
+        ew.error_function = Property::unreach_call;
+    return ew;
 }
 
 std::set<int> Witness::Segment::check_avoid(const klee::KInstruction &ki){
@@ -120,6 +128,47 @@ bool Witness::Location::match(const klee::KInstruction &ki) {
         && (filename == ki.info->file));
 }
 
+Witness::Property Witness::get_property(const std::string& str){
+    if (str.find("valid-free") != std::string::npos)
+        return Witness::Property::valid_free;
+    if (str.find("valid-deref") != std::string::npos)
+        return Witness::Property::valid_deref;
+    if (str.find("valid-memtrack") != std::string::npos)
+        return Witness::Property::valid_memtrack;
+    if (str.find("valid-memcleanup") != std::string::npos)
+        return Witness::Property::valid_memcleanup;
+    if (str.find("! overflow") != std::string::npos)
+        return Witness::Property::overflow;
+    if (str.find("G ! call(") != std::string::npos) {
+        return Witness::Property::unreach_call;
+    }
+
+}
+
+std::string Witness::get_error_function(const std::string& str){
+    /*
+    size_t pos;
+    if ((pos = str.find("G ! call(")) != std::string::npos) {
+        pos += 9;
+        while (pos < str.size() && (str[pos] == '(' || str[pos] == ' '))
+          pos++;
+        size_t len = 0;
+        while (pos+len < str.size() && !(str[pos+len] == '(' ||
+                                         str[pos+len] == ' ' ||
+                                         str[pos+len] == ')' ))
+            len++;
+        if (len != 0)
+            return str.substr(pos, len);
+        else
+            klee::klee_error("Invalid specification: missing error function");
+        return ""
+    }
+    */
+
+    /* SV-COMP */
+    assert(str.find("reach_error") != std::string::npos);
+    return "reach_error";
+}
 
 bool Witness::Waypoint::match(const klee::KInstruction &ki) {
 
