@@ -16,6 +16,8 @@
 #include <vector>
 
 #include "ConcreteValue.h"
+#include "klee/Witness/Witness.h"
+
 
 struct KTest;
 
@@ -175,6 +177,9 @@ public:
                                std::map<const std::string*, std::set<unsigned> > &res) = 0;
 
   virtual std::tuple<std::string, unsigned, unsigned> getErrorLocation() = 0;
+
+  virtual void setWitness(Witness::ErrorWitness w) = 0;
+
 };
 
 } // End klee namespace

@@ -1,5 +1,5 @@
-#ifndef WITNESSPARSER_H
-#define WITNESSPARSER_H
+#ifndef WITNESS_H
+#define WITNESS_H
 
 #include "klee/Module/KInstruction.h"
 #include "llvm/IR/Instruction.h"
@@ -51,7 +51,7 @@ namespace Witness {
   };
 
   struct ErrorWitness {
-      std::vector<Segment> witness;
+      std::vector<Segment> segments;
       Property property;
       std::string error_function;
   };
@@ -63,4 +63,4 @@ namespace Witness {
 }
 
 
-#endif // WITNESSPARSER_H
+#endif // WITNESS_H

@@ -8,6 +8,8 @@
 
 #include "klee/Witness/Witness.h"
 #include "llvm/IR/Instructions.h"
+#include "klee/Support/ErrorHandling.h"
+
 
 
 
@@ -101,7 +103,7 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
     }
 
     ErrorWitness ew;
-    ew.witness = witness;
+    ew.segments = witness;
 
     std::string specification = node[0]["metadata"]["task"]["specification"].as<std::string>();
     ew.property = get_property(specification);

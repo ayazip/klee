@@ -1831,6 +1831,9 @@ int main(int argc, char **argv, char **envp) {
     kTest_free(ktest);
   }
 
+  Witness::parse(WitnessFile.c_str());
+  //interpreter->setWitness();
+
   auto startTime = std::time(nullptr);
   { // output clock info and start time
     std::stringstream startInfo;
