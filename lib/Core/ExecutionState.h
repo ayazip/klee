@@ -21,6 +21,7 @@
 #include "klee/Module/KInstIterator.h"
 #include "klee/Solver/Solver.h"
 #include "klee/System/Time.h"
+#include "klee/Witness/Witness.h"
 
 #include <map>
 #include <memory>
@@ -319,7 +320,7 @@ public:
   bool forkDisabled = false;
 
   ///@brief Tracks the current segment in the witness
-  int segment = 0;
+  std::vector<Witness::Segment>::iterator segment;
 
 public:
 #ifdef KLEE_UNITTEST
@@ -358,6 +359,8 @@ public:
                               const std::string& name);
 
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
+  void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
+  void next_segment() { std::next(segment); }
 };
 
 struct ExecutionStateIDCompare {

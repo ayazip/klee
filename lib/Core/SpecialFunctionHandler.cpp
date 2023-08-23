@@ -1058,6 +1058,8 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
                                                       bool isSigned,
                                                       const std::string& name,
                                                       bool isPointer) {
+
+
   // create nondet value if we are not replaying
   if (executor.replayNondet.empty()) {
     executor.bindLocal(target, state,

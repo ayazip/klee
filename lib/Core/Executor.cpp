@@ -2374,6 +2374,39 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             }
           }
 
+         /* Witness::Segment current =  *state.segment;
+          for (auto index : current.check_avoid(*kcaller, ki)){
+            Witness::Waypoint avoid = current.avoid[index];
+            ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(result.value));
+
+            bool feasible;
+            bool success __attribute__((unused)) = solver->mayBeTrue(
+                state.constraints, constraint, feasible, state.queryMetaData);
+            assert(success && "FIXME: Unhandled solver failure");
+            if (feasible)
+              state.addConstraint(constraint);
+
+          }
+
+          if (state.segment != witness.segments.end()
+                  && current.follow.match(*kcaller)) {
+
+              ref<Expr> constraint = current.follow.get_return_constraint(result.value);
+
+              bool feasible;
+              bool success __attribute__((unused)) = solver->mayBeTrue(
+                  state.constraints, constraint, feasible, state.queryMetaData);
+              assert(success && "FIXME: Unhandled solver failure");
+
+              if (feasible) {
+                state.addConstraint(constraint);
+                state.next_segment();
+              } else {
+                  terminateState(state);
+              }
+          }*/
+          insert_constraint(result.value, state, *kcaller, i->getOpcode());
+
           bindLocal(kcaller, state, result);
         }
       } else {
@@ -2400,6 +2433,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       cond = optimizer.optimizeExpr(cond, false);
       Executor::StatePair branches = fork(state, cond, false, BranchType::ConditionalBranch);
 
+      std::pair<bool,bool> explore = state.segment->get_condition_constraint(*ki);
+
       // NOTE: There is a hidden dependency here, markBranchVisited
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
@@ -2407,10 +2442,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
-      if (branches.first)
+      if (branches.first && explore.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
-      if (branches.second)
+      if (branches.second && explore.second)
         transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+
+      if (state.segment->follow.match(*ki))
+          state.next_segment();
     }
     break;
   }
@@ -2677,6 +2715,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           i++;
         }
       }
+
+      Witness::Segment current =  *state.segment;
+      if (!current.check_avoid(*ki).empty())
+          terminateState(state);
+      if (state.segment != witness.segments.end()
+              && current.follow.match(*ki))
+          state.next_segment();
+
 
       executeCall(state, ki, f, arguments);
     } else {
@@ -4410,8 +4456,14 @@ void Executor::callExternalFunction(ExecutionState &state,
                                     Function *function,
                                     const std::vector<Cell> &arguments) {
   // check if specialFunctionHandler wants it
-  if (specialFunctionHandler->handle(state, function, target, arguments))
+  if (specialFunctionHandler->handle(state, function, target, arguments)) {
+      if (function->getName().startswith("__VERIFIER_nondet")) {
+          ref<Expr> left = getDestCell(state, target).value;
+          insert_constraint(left, state, *target, Instruction::Ret);
+      }
+
     return;
+  }
 
   if (ExternalCalls == ExternalCallPolicy::Pure &&
       nokExternals.count(function->getName().str()) > 0) {
@@ -5357,6 +5409,8 @@ void Executor::runFunctionAsMain(Function *f,
 
   initializeGlobals(*state, isEntryFunctionMain);
 
+  state->setSegment(witness.segments.begin());
+
   processTree = std::make_unique<PTree>(state);
   run(*state);
   processTree = nullptr;
@@ -5950,6 +6004,55 @@ void Executor::setReplayNondet(const struct KTest *out) {
     }
   }
 }
+
+
+void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
+                                 const KInstruction& ki, unsigned type) {
+
+    Witness::Segment current =  *state.segment;
+
+    for (auto index : current.check_avoid(ki, type)){
+      Witness::Waypoint avoid = current.avoid[index];
+      ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(left));
+
+      bool feasible;
+      bool success __attribute__((unused)) = solver->mayBeTrue(
+          state.constraints, constraint, feasible, state.queryMetaData);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (feasible)
+        state.addConstraint(constraint);
+      else
+         terminateState(state);
+
+    }
+
+    if (state.segment != witness.segments.end()
+            && current.follow.match(ki, type)) {
+
+        ref<Expr> constraint = current.follow.get_return_constraint(left);
+
+        bool feasible;
+        bool success __attribute__((unused)) = solver->mayBeTrue(
+            state.constraints, constraint, feasible, state.queryMetaData);
+        assert(success && "FIXME: Unhandled solver failure");
+
+        if (feasible) {
+          state.addConstraint(constraint);
+          state.next_segment();
+        } else {
+            terminateState(state);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
 
 ///
 

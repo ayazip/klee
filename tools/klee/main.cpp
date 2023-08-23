@@ -76,7 +76,7 @@ namespace {
 
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter,
-            cl::desc("<program arguments>..."));
+            cl::desc("<program arguments>..."), cl::Optional);
 
 
   /*** Test case options ***/
@@ -1831,8 +1831,7 @@ int main(int argc, char **argv, char **envp) {
     kTest_free(ktest);
   }
 
-  Witness::parse(WitnessFile.c_str());
-  //interpreter->setWitness();
+  interpreter->setWitness(Witness::parse(WitnessFile.c_str()));
 
   auto startTime = std::time(nullptr);
   { // output clock info and start time

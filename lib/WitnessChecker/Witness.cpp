@@ -109,15 +109,15 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
     ew.property = get_property(specification);
 
     if (ew.property == Property::unreach_call)
-        ew.error_function = Property::unreach_call;
+        ew.error_function = get_error_function(specification);
     return ew;
 }
 
-std::set<int> Witness::Segment::check_avoid(const klee::KInstruction &ki){
-    std::set<int> matched;
+std::set<size_t> Witness::Segment::check_avoid(const klee::KInstruction& ki, unsigned type){
+    std::set<size_t> matched;
 
     for (size_t i=0; i<avoid.size(); i++) {
-        if (avoid[i].match(ki))
+        if (avoid[i].match(ki, type))
            matched.insert(i);
     }
     return matched;
@@ -172,8 +172,9 @@ std::string Witness::get_error_function(const std::string& str){
     return "reach_error";
 }
 
-bool Witness::Waypoint::match(const klee::KInstruction &ki) {
+bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
+    // in case of returns, ki is the caller and we match the callsite location
     if (!loc.match(ki))
         return false;
 
@@ -183,7 +184,7 @@ bool Witness::Waypoint::match(const klee::KInstruction &ki) {
         return (ki.inst->getOpcode() == llvm::Instruction::Br);
 
     case Witness::Type::Enter:
-        if (ki.inst->getOpcode() != llvm::Instruction::Call)
+        if (ki.inst->getOpcode() != llvm::Instruction::Call || t == llvm::Instruction::Ret)
             return false;
         if (!loc.identifier.empty()) {
 
@@ -197,7 +198,7 @@ bool Witness::Waypoint::match(const klee::KInstruction &ki) {
         return true;
 
     case Witness::Type::Return:
-        return (ki.inst->getOpcode() == llvm::Instruction::Ret);
+        return (t == llvm::Instruction::Ret);
          //if (loc.identifier && (cast<ReturnInst>(ki->inst))->getFunction()->getName()) {
          //   break;
 
@@ -212,3 +213,134 @@ bool Witness::Waypoint::match(const klee::KInstruction &ki) {
 }
 
 
+std::pair<bool, bool> Witness::Segment::get_condition_constraint(const klee::KInstruction &ki) {
+
+    std::set<size_t> indices = check_avoid(ki);
+    bool go_true = true;
+    bool go_false = true;
+
+    // go_x is set to false if the follow waypoint says to take the !x branch
+    if (follow.type ==  Witness::Type::Branch && follow.match(ki)) {
+        bool result = get_value(follow.constraint);
+        go_true = result;
+        go_false = !result;
+    }
+
+    if (indices.empty())
+        return std::make_pair(go_true, go_false);
+
+    bool avoid_true = !go_true;
+    bool avoid_false = !go_false;
+
+    for (size_t i : indices) {
+        assert(avoid[i].type ==  Witness::Type::Branch);
+        bool avoid_value = get_value(avoid[i].constraint);
+
+        // follow false and avoid false, or folow true and avoid true, cause an error
+        if ((!go_true && !avoid_value) || (!go_false && avoid_value))
+            klee::klee_error("Conflicting branching info in segment");
+
+        avoid_true = avoid_true || avoid_value;
+        avoid_false = avoid_false || !avoid_value;
+    }
+    return std::make_pair(!avoid_true, !avoid_false);
+
+}
+
+bool get_value(const std::string& constraint){
+    if (constraint == "true")
+        return true;
+    if (constraint == "false")
+        return false;
+    klee::klee_error("Unsupported constraint value for branching waypoint");
+
+}
+
+klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::Expr> left){
+
+    size_t start = constraint.find("\\result");
+
+    if (start == std::string::npos)
+        klee::klee_error("invalid constraint");
+
+    std::string op;
+
+    start += 7;
+    while (start < constraint.size() && (constraint[start] == ' '))
+        start++;
+
+    if (start + 1 < constraint.size() && constraint[start+1] == '=') {
+        op = constraint.substr(start, 2);
+        start += 2;
+    }
+    else {
+        op = constraint[start];
+        start++;
+    }
+
+    while (start < constraint.size() && (constraint[start] == ' ' ||
+                                         constraint[start] == '('))
+        start++;
+
+    size_t len = 0;
+    while (start+len < constraint.size() && constraint[start+len] != ';'
+           && constraint[start+len] != ' ' && constraint[start+len] != ')')
+        len++;
+
+    std::string result = constraint.substr(start, len);
+    klee::Expr::Width width = (*left.get()).getWidth();
+
+
+    int64_t s_value = 0;
+    uint64_t u_value = 0;
+    bool is_signed = true;
+
+    if (isdigit(result[0]) || result[0] == '-') {
+        size_t end;
+        if(result[result.size() - 1] == 'u' || result[result.size() - 1] == 'u') {
+            is_signed = false;
+            u_value = std::stoull(result, &end, 0);
+            end++;
+        } else
+            s_value = std::stoll(result, &end, 0);
+
+        if (end != result.size())
+            klee::klee_warning("Cant parse return constraint");
+
+    } else {
+        klee::klee_error("Cant parse return constraint");
+    }
+
+
+    klee::ref<klee::Expr> right = klee::ref<klee::Expr>(
+                klee::ConstantExpr::alloc(llvm::APInt(width,
+                                                      is_signed ? s_value : u_value,
+                                                      is_signed)));
+
+//    klee::EqExpr eq = klee::EqExpr(left, right);
+//    klee::ref<klee::Expr> cmp =  klee::ref<klee::Expr>(eq);
+    if (op == "==")
+        return (klee::EqExpr::alloc(left, right));
+    if (op == "!=")
+        return klee::NotExpr::alloc(klee::EqExpr::alloc(left, right));
+    if (is_signed) {
+        if (op == ">")
+            return klee::SltExpr::alloc(right, left);
+        if (op == ">=")
+            return klee::SleExpr::alloc(right, left);
+        if (op == "<")
+            return klee::SltExpr::alloc(left, right);
+        if (op == "<=")
+            return klee::SleExpr::alloc(left, right);
+    } else {
+        if (op == ">")
+            return klee::UltExpr::alloc(right, left);
+        if (op == ">=")
+            return klee::UleExpr::alloc(right, left);
+        if (op == "<")
+            return klee::UltExpr::alloc(left, right);
+        if (op == "<=")
+            return klee::UleExpr::alloc(left, right);
+    }
+    klee::klee_error("Invalid operand in return constraint");
+}
