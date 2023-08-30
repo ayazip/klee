@@ -14,8 +14,6 @@
 
 
 Witness::Type parse_type(YAML::Node yaml_waypoint){
-    assert(yaml_waypoint["action"].as<std::string>() != "target");
-
     if (yaml_waypoint["type"].as<std::string>() == "assumption")
         return Witness::Type::Assume;
     if (yaml_waypoint["type"].as<std::string>() == "branching")
@@ -24,19 +22,21 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
         return Witness::Type::Return;
     if (yaml_waypoint["type"].as<std::string>() == "identifier_evaluation")
         return Witness::Type::Enter;
+    if (yaml_waypoint["type"].as<std::string>() == "target")
+        return Witness::Type::Target;
     return Witness::Type::Undefined;
 
 }
 
-Witness::Location parse_location(YAML::Node yaml_waypoint){
+Witness::Location parse_location(YAML::Node yaml_waypoint, std::string key = "location"){
 
     Witness::Location loc;
-    loc.filename = yaml_waypoint["location"]["file_name"].as<std::string>();
-    loc.line = yaml_waypoint["location"]["line"].as<uint>();
-    if (yaml_waypoint["location"]["column"].Type() != YAML::NodeType::Undefined)
-        loc.column = yaml_waypoint["location"]["column"].as<uint>();
-    if (yaml_waypoint["location"]["identifier"].Type() != YAML::NodeType::Undefined)
-        loc.identifier = yaml_waypoint["location"]["identifier"].as<std::string>();
+    loc.filename = yaml_waypoint[key]["file_name"].as<std::string>();
+    loc.line = yaml_waypoint[key]["line"].as<uint>();
+    if (yaml_waypoint[key]["column"].Type() != YAML::NodeType::Undefined)
+        loc.column = yaml_waypoint[key]["column"].as<uint>();
+    if (yaml_waypoint[key]["identifier"].Type() != YAML::NodeType::Undefined)
+        loc.identifier = yaml_waypoint[key]["identifier"].as<std::string>();
 
     return loc;
 
@@ -67,19 +67,21 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
         for (std::size_t j=0; j<yaml_segment.size(); j++) {
 
             YAML::Node yaml_waypoint = yaml_segment[j]["waypoint"];
+
             Waypoint waypoint;
 
             waypoint.loc = parse_location(yaml_waypoint);
+            waypoint.type = parse_type(yaml_waypoint);
 
-            if (yaml_waypoint["action"].as<std::string>() == "target"){
+            if (waypoint.type == Witness::Type::Target){
                 assert(i == sequence.size() - 1);
                 assert(j == yaml_segment.size() - 1);
-                waypoint.type = Witness::Type::Undefined;
+
+                waypoint.loc2 = parse_location(yaml_waypoint, "location2");
+
                 segment.follow = waypoint;
                 break;
             }
-
-            waypoint.type = parse_type(yaml_waypoint);
 
             YAML::Node constraint = yaml_waypoint["constraint"]["string"];
 
@@ -130,6 +132,7 @@ bool Witness::Location::match(const klee::KInstruction &ki) {
         && (filename == ki.info->file));
 }
 
+
 Witness::Property Witness::get_property(const std::string& str){
     if (str.find("valid-free") != std::string::npos)
         return Witness::Property::valid_free;
@@ -140,7 +143,7 @@ Witness::Property Witness::get_property(const std::string& str){
     if (str.find("valid-memcleanup") != std::string::npos)
         return Witness::Property::valid_memcleanup;
     if (str.find("! overflow") != std::string::npos)
-        return Witness::Property::overflow;
+        return Witness::Property::no_overflow;
     if (str.find("G ! call(") != std::string::npos) {
         return Witness::Property::unreach_call;
     }
@@ -175,7 +178,7 @@ std::string Witness::get_error_function(const std::string& str){
 bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
     // in case of returns, ki is the caller and we match the callsite location
-    if (!loc.match(ki))
+    if (!loc.match(ki) && type != Type::Target)
         return false;
 
     switch (type) {
@@ -204,6 +207,11 @@ bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
     case Witness::Type::Assume:
         return false;
+
+    case Witness::Type::Target:
+        return (ki.info->line >= loc.line && ki.info->line <= loc2.line
+            && (!loc.column || ki.info->column == loc.column) && (ki.info->column <= loc2.column)
+            && (loc.filename == ki.info->file));
 
     default:
         std::cout << "Invalid waypoint type!\n";

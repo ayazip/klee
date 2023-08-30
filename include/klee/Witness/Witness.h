@@ -18,6 +18,7 @@ namespace Witness {
       Branch,
       Return,
       Enter,
+      Target,
       Undefined};
 
 
@@ -27,7 +28,7 @@ namespace Witness {
       valid_memtrack,
       valid_memcleanup,
       termination,
-      overflow,
+      no_overflow,
       unreach_call
   };
 
@@ -43,6 +44,7 @@ namespace Witness {
   struct Waypoint {
     Type type;
     Location loc;
+    Location loc2;
     std::string constraint = "true";
 
     bool match(const klee::KInstruction& ki,  unsigned type = 0);

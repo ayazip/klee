@@ -4262,6 +4262,45 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      StateTerminationType terminationType,
                                      const llvm::Twine &info,
                                      const char *suffix) {
+
+  if ((*state.segment).follow.type == Witness::Type::Target
+          &&(*state.segment).follow.match(*state.pc)) {
+
+    switch (terminationType) {
+    case StateTerminationType::Free:
+      if (witness.property == Witness::Property::valid_free) {
+        klee_message("Valid violation witness: valid-free");
+        haltExecution=true;
+      }
+      break;
+    case StateTerminationType::Ptr:
+    case StateTerminationType::BadVectorAccess:
+      if (witness.property == Witness::Property::valid_deref) {
+        klee_message("Valid violation witness: valid-deref");
+        haltExecution=true;
+      }
+      break;
+    case StateTerminationType::Overflow:
+      if (witness.property == Witness::Property::no_overflow) {
+        klee_message("Valid violation witness: no-overflow");
+        haltExecution=true;
+      }
+      break;
+    case StateTerminationType::Leak:
+      if (witness.property == Witness::Property::valid_memtrack) {
+        klee_message("Valid violation witness: valid-memtrack");
+        haltExecution=true;
+      }
+      if (witness.property == Witness::Property::valid_memcleanup) {
+        klee_message("Valid violation witness: valid-memcleanup");
+        haltExecution=true;
+      }
+      break;
+    default:
+      break;
+    }
+  }
+
   std::string message = messaget.str();
   static std::set< std::pair<Instruction*, std::string> > emittedErrors;
   Instruction * lastInst;
@@ -4281,6 +4320,16 @@ void Executor::terminateStateOnError(ExecutionState &state,
         klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
         reportError(message, state, info, suffix, terminationType);
       }
+
+      if ((*state.segment).follow.type == Witness::Type::Target
+          &&(*state.segment).follow.match(*state.pc)) {
+        if (witness.property == Witness::Property::valid_memcleanup) {
+          klee_message("Valid violation witness: valid-memcleanup");
+          haltExecution=true;
+        }
+      }
+
+
       if (shouldExitOn(StateTerminationType::Leak))
         haltExecution = true;
     }
