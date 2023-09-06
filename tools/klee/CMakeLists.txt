@@ -6,18 +6,17 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_executable(klee
+add_executable(witch-klee
   main.cpp
 )
 
 set(KLEE_LIBS
   kleeCore
-  witnessChecker
 )
 
-target_link_libraries(klee ${KLEE_LIBS})
+target_link_libraries(witch-klee ${KLEE_LIBS})
 
-install(TARGETS klee RUNTIME DESTINATION bin)
+install(TARGETS witch-klee RUNTIME DESTINATION bin)
 
 # The KLEE binary depends on the runtimes
-add_dependencies(klee BuildKLEERuntimes)
+add_dependencies(witch-klee BuildKLEERuntimes)
