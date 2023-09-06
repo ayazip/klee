@@ -3858,6 +3858,9 @@ void Executor::run(ExecutionState &initialState) {
   std::vector<ExecutionState *> newStates(states.begin(), states.end());
   searcher->update(0, newStates, std::vector<ExecutionState *>());
 
+  if (witness.property == Witness::Property::unreach_call)
+      ErrorFun = witness.error_function;
+
   // main interpreter loop
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
