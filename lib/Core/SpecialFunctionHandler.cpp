@@ -152,6 +152,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__VERIFIER_nondet_ushort", handleVerifierNondetUShort, true),
 
   add("__VERIFIER_assume", handleAssume, false),
+  add("__VALIDATOR_assume", handleValAssume, false),
 
 #ifdef SUPPORT_KLEE_EH_CXX
   add("_klee_eh_Unwind_RaiseException_impl", handleEhUnwindRaiseExceptionImpl, false),
@@ -597,6 +598,37 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
     }
   } else {
     executor.addConstraint(state, e);
+  }
+}
+
+void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
+                            KInstruction *target,
+                            const std::vector<Cell> &arguments) {
+  assert(arguments.size()==2 && "invalid number of arguments to validator_assume");
+
+  ConstantExpr *s = cast<ConstantExpr>(arguments[1].value);
+  if (s->getAPValue() != state.segment_number)
+      return;
+
+  ref<Expr> e = arguments[0].value;
+
+  if (e->getWidth() != Expr::Bool)
+    e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
+
+  bool res;
+  bool success __attribute__((unused)) = executor.solver->mustBeFalse(
+      state.constraints, e, res, state.queryMetaData);
+  assert(success && "FIXME: Unhandled solver failure");
+  if (res) {
+    if (SilentKleeAssume) {
+      executor.terminateState(state);
+    } else {
+      executor.terminateStateOnUserError(
+          state, "invalid klee_assume call (provably false)");
+    }
+  } else {
+    executor.addConstraint(state, e);
+    state.next_segment();
   }
 }
 

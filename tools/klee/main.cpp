@@ -1182,6 +1182,7 @@ static const char *modelledExternals[] = {
   "__VERIFIER_nondet_unsigned",
   "__VERIFIER_nondet_ushort",
   "__VERIFIER_assume",
+  "__VALIDATOR_assume",
   "pthread_create",
   "pthread_join",
   "pthread_key_create",

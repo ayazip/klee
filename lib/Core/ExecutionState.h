@@ -322,6 +322,9 @@ public:
   ///@brief Tracks the current segment in the witness
   std::vector<Witness::Segment>::iterator segment;
 
+  ///@brief Tracks the current segment in the witness
+  uint64_t segment_number = 0;
+
 public:
 #ifdef KLEE_UNITTEST
   // provide this function only in the context of unittests
@@ -360,7 +363,7 @@ public:
 
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
   void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
-  void next_segment() { std::next(segment); }
+  void next_segment() { std::next(segment); segment_number++; }
 };
 
 struct ExecutionStateIDCompare {
