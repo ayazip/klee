@@ -12,6 +12,7 @@ add_executable(witch-klee
 
 set(KLEE_LIBS
   kleeCore
+  witnessChecker
 )
 
 target_link_libraries(witch-klee ${KLEE_LIBS})
