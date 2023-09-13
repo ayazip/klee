@@ -110,6 +110,11 @@ namespace {
 
   cl::opt<bool>
   WriteWitness("write-witness",
+            cl::desc("Write .yml files in the SV-COMP format (default=true)"),
+            cl::cat(TestCaseCat));
+
+  cl::opt<bool>
+  WriteWitnessGraphML("write-witness-graphml",
             cl::desc("Write .graphml files in the SV-COMP format (default=false)"),
             cl::cat(TestCaseCat));
 
@@ -657,6 +662,30 @@ void KleeHandler::processTestCase(const ExecutionState &state,
     }
 
     if (WriteWitness) {
+      if (auto witness = openTestFile("test", id)) {
+
+        auto testvec = m_interpreter->getTestVector(state);
+
+        for (auto& input : testvec) {
+          const auto& name = input.getName();
+          if (name.compare(0, 17 , "__VERIFIER_nondet") != 0)
+              continue;
+
+          if (input.line > 0 && input.col > 0)
+            *witness <<
+            input.getName() << ":" << input.line << ":" << input.col << ":" << input.toString() << "\n";
+         }
+
+        std::string errorLoc = m_interpreter->getErrorLocation();
+        *witness << "@TARGET:" << errorLoc << "\n";
+
+
+      } else {
+        klee_warning("unable to write witness file, losing it");
+      }
+    }
+
+    if (WriteWitnessGraphML) {
       if (auto witness = openTestFile("graphml", id)) {
 
         *witness << "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n" ;
