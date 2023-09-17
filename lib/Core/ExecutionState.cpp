@@ -17,6 +17,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/OptionCategories.h"
+#include "klee/Internal/Support/ErrorHandling.h"
+
 
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
@@ -415,4 +417,22 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
     out << "\n";
     target = sf.caller;
   }
+}
+
+
+// Get the line and column of the errror
+std::string ExecutionState::getErrorLocation() const {
+  const KInstruction *target = prevPC;
+  for (ExecutionState::stack_ty::const_reverse_iterator
+         it = stack.rbegin(), ie = stack.rend();
+       it != ie; ++it) {
+    const StackFrame &sf = *it;
+    const InstructionInfo &ii = *target->info;
+
+    if (ii.file != "" && ii.line != 0 && ii.column != 0)
+      return ii.file + ":" + std::to_string(ii.line) + ":" + std::to_string(ii.column);
+    target = sf.caller;
+  }
+  klee::klee_warning("Can't get error location for witness");
+  return ":::";
 }

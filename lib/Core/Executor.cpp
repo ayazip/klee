@@ -3561,7 +3561,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   if (shouldExitOn(termReason)) {
     haltExecution = true;
-    errorLoc = std::to_string(ii.line) + ":" + std::to_string(ii.column);
+    errorLoc = state.getErrorLocation();
   }
 
   bool notemitted = emittedErrors.insert(std::make_pair(lastInst, message)).second;
