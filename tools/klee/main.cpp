@@ -24,6 +24,7 @@
 #include "klee/OptionCategories.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Statistics.h"
+#include "klee/Witness/Witness.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
@@ -69,11 +70,15 @@ using namespace klee;
 
 namespace {
   cl::opt<std::string>
-  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
+  InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"), cl::Required);
+
+  cl::opt<std::string>
+  WitnessFile(cl::Positional, cl::desc("<witness file>"), cl::Required);
 
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter,
-            cl::desc("<program arguments>..."));
+            cl::desc("<program arguments>..."),
+            cl::Optional);
 
 
   /*** Test case options ***/
@@ -1114,6 +1119,7 @@ static const char *modelledExternals[] = {
   "__ubsan_handle_sub_overflow",
   "__ubsan_handle_mul_overflow",
   "__ubsan_handle_divrem_overflow",
+  "__ubsan_handle_shift_out_of_bounds",
   "__VERIFIER_scope_enter",
   "__VERIFIER_scope_leave",
   "__VERIFIER_nondet_bool",
@@ -1136,6 +1142,7 @@ static const char *modelledExternals[] = {
   "__VERIFIER_nondet_unsigned",
   "__VERIFIER_nondet_ushort",
   "__VERIFIER_assume",
+  "__VALIDATOR_assume",
   "pthread_create",
   "pthread_join",
   "pthread_key_create",
@@ -1740,6 +1747,8 @@ int main(int argc, char **argv, char **envp) {
     interpreter->setReplayNondet(ktest);
     kTest_free(ktest);
   }
+
+  interpreter->setWitness(Witness::parse(WitnessFile.c_str()));
 
   auto startTime = std::time(nullptr);
   { // output clock info and start time

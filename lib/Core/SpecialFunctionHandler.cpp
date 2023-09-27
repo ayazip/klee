@@ -146,6 +146,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__VERIFIER_nondet_ushort", handleVerifierNondetUShort, true),
 
   add("__VERIFIER_assume", handleAssume, false),
+  add("__VALIDATOR_assume", handleValAssume, false),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -170,6 +171,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__ubsan_handle_sub_overflow", handleSubOverflow, false),
   add("__ubsan_handle_mul_overflow", handleMulOverflow, false),
   add("__ubsan_handle_divrem_overflow", handleDivRemOverflow, false),
+  add("__ubsan_handle_shift_out_of_bounds", handleShiftOverflow, false),
 
   add("pthread_create", handlePthreadCreate, true),
   add("pthread_join", handlePthreadJoin, true),
@@ -532,6 +534,42 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
   } else {
     executor.addConstraint(state, e);
   }
+}
+
+void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
+                            KInstruction *target,
+                            const std::vector<Cell> &arguments) {
+  assert(arguments.size()==3 && "invalid number of arguments to validator_assume");
+
+  ConstantExpr *s = cast<ConstantExpr>(arguments[1].value);
+  if (s->getAPValue() != state.segment_number)
+      return;
+
+  ref<Expr> e = arguments[0].value;
+
+  if (e->getWidth() != Expr::Bool)
+    e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
+
+  ConstantExpr *follow = cast<ConstantExpr>(arguments[2].value);
+  if (follow->getAPValue() == 0)
+      e = NotExpr::create(e);
+
+  bool res;
+  bool success __attribute__((unused)) = executor.solver->mustBeFalse(
+      state, e, res);
+  assert(success && "FIXME: Unhandled solver failure");
+  if (res) {
+    if (SilentKleeAssume) {
+      executor.terminateState(state);
+    } else {
+      executor.terminateStateOnError(
+          state, "invalid assume call (provably false)", Executor::User);
+    }
+  } else {
+    executor.addConstraint(state, e);
+    if (follow->getAPValue() == 1)
+        state.next_segment();
+    }
 }
 
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,
@@ -1297,6 +1335,13 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
                                                KInstruction *target,
                                                const std::vector<Cell> &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
+                                 Executor::Overflow);
+}
+
+void SpecialFunctionHandler::handleShiftOverflow(ExecutionState &state,
+                                               KInstruction *target,
+                                               const std::vector<Cell> &arguments) {
+  executor.terminateStateOnError(state, "overflow on shift",
                                  Executor::Overflow);
 }
 

@@ -15,6 +15,7 @@
 #include "klee/Internal/ADT/TreeStream.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/MergeHandler.h"
+#include "klee/Witness/Witness.h"
 
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
@@ -228,6 +229,12 @@ public:
 
   NondetValue& addNondetValue(const KValue& val, bool isSigned, const std::string& name);
 
+  ///@brief Tracks the current segment in the witness
+  std::vector<Witness::Segment>::iterator segment;
+
+  ///@brief Tracks the current segment in the witness
+  uint64_t segment_number = 0;
+
 private:
   ExecutionState() : ptreeNode(0) {}
 
@@ -253,6 +260,10 @@ public:
 
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
+
+  void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
+  void next_segment() { segment = std::next(segment); segment_number++; }
+  std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
 };
 }
 

@@ -127,6 +127,7 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   TimerGroup timers;
   std::unique_ptr<PTree> processTree;
+  Witness::ErrorWitness witness;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -573,6 +574,10 @@ public:
 
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
+
+  void setWitness(Witness::ErrorWitness w) { witness = w; };
+  void insert_constraint(ref<Expr> left, ExecutionState& state,
+                         const KInstruction& ki, unsigned type);
 };
   
 } // End klee namespace
