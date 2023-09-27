@@ -182,6 +182,8 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__ubsan_handle_sub_overflow", handleSubOverflow, false),
   add("__ubsan_handle_mul_overflow", handleMulOverflow, false),
   add("__ubsan_handle_divrem_overflow", handleDivRemOverflow, false),
+  add("__ubsan_handle_shift_out_of_bounds", handleShiftOverflow, false),
+
 
   add("pthread_create", handlePthreadCreate, true),
   add("pthread_join", handlePthreadJoin, true),
@@ -604,7 +606,7 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
 void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
                             KInstruction *target,
                             const std::vector<Cell> &arguments) {
-  assert(arguments.size()==2 && "invalid number of arguments to validator_assume");
+  assert(arguments.size()==3 && "invalid number of arguments to validator_assume");
 
   ConstantExpr *s = cast<ConstantExpr>(arguments[1].value);
   if (s->getAPValue() != state.segment_number)
@@ -615,6 +617,10 @@ void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
 
+  ConstantExpr *follow = cast<ConstantExpr>(arguments[2].value);
+  if (follow->getAPValue() == 0)
+      e = NotExpr::create(e);
+
   bool res;
   bool success __attribute__((unused)) = executor.solver->mustBeFalse(
       state.constraints, e, res, state.queryMetaData);
@@ -624,12 +630,13 @@ void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
       executor.terminateState(state);
     } else {
       executor.terminateStateOnUserError(
-          state, "invalid klee_assume call (provably false)");
+          state, "invalid assume call (provably false)");
     }
   } else {
     executor.addConstraint(state, e);
-    state.next_segment();
-  }
+    if (follow->getAPValue() == 1)
+        state.next_segment();
+    }
 }
 
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,
@@ -1391,6 +1398,13 @@ void SpecialFunctionHandler::handleDivRemOverflow(
     ExecutionState &state, KInstruction *target,
     const std::vector<Cell> &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
+                                 StateTerminationType::Overflow);
+}
+
+void SpecialFunctionHandler::handleShiftOverflow(
+    ExecutionState &state, KInstruction *target,
+    const std::vector<Cell> &arguments) {
+  executor.terminateStateOnError(state, "overflow on shift",
                                  StateTerminationType::Overflow);
 }
 

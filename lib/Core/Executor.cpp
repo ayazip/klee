@@ -51,6 +51,9 @@
 #include "klee/Support/OptionCategories.h"
 #include "klee/System/MemoryUsage.h"
 #include "klee/System/Time.h"
+#include "klee/Witness/Witness.h"
+
+
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1382,6 +1385,7 @@ Executor::toConstant(ExecutionState &state,
   os << "silently concretizing (reason: " << reason << ") expression " << e
      << " to value " << value << " (" << (*(state.pc)).info->file << ":"
      << (*(state.pc)).info->line << ")";
+  os << "Witness may not be confirmed.";
 
   if (AllExternalWarnings)
     klee_warning("%s", os.str().c_str());
@@ -1828,6 +1832,10 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     state.lastLoopFail = ki->inst;
     // fall-through
   } else if (isErrorCall(f->getName())) {
+    if ((*state.segment).follow.type == Witness::Type::Target
+              &&(*state.segment).follow.match_target(state.getErrorLocation())) {
+        klee_message("Valid violation witness: unreach-call");
+    }
     terminateStateOnError(state,
                           "ASSERTION FAIL: " + ErrorFun + " called",
                           StateTerminationType::Assert);
@@ -2374,37 +2382,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             }
           }
 
-         /* Witness::Segment current =  *state.segment;
-          for (auto index : current.check_avoid(*kcaller, ki)){
-            Witness::Waypoint avoid = current.avoid[index];
-            ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(result.value));
-
-            bool feasible;
-            bool success __attribute__((unused)) = solver->mayBeTrue(
-                state.constraints, constraint, feasible, state.queryMetaData);
-            assert(success && "FIXME: Unhandled solver failure");
-            if (feasible)
-              state.addConstraint(constraint);
-
-          }
-
-          if (state.segment != witness.segments.end()
-                  && current.follow.match(*kcaller)) {
-
-              ref<Expr> constraint = current.follow.get_return_constraint(result.value);
-
-              bool feasible;
-              bool success __attribute__((unused)) = solver->mayBeTrue(
-                  state.constraints, constraint, feasible, state.queryMetaData);
-              assert(success && "FIXME: Unhandled solver failure");
-
-              if (feasible) {
-                state.addConstraint(constraint);
-                state.next_segment();
-              } else {
-                  terminateState(state);
-              }
-          }*/
           insert_constraint(result.value, state, *kcaller, i->getOpcode());
 
           bindLocal(kcaller, state, result);
@@ -2431,9 +2408,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       ref<Expr> cond = eval(ki, 0, state).value;
 
       cond = optimizer.optimizeExpr(cond, false);
-      Executor::StatePair branches = fork(state, cond, false, BranchType::ConditionalBranch);
-
       std::pair<bool,bool> explore = state.segment->get_condition_constraint(*ki);
+
+      if (explore.first && !explore.second) addConstraint(state, cond);
+      if (!explore.first && explore.second) addConstraint(state, Expr::createIsZero(cond));
+
+      Executor::StatePair branches = fork(state, cond, false, BranchType::ConditionalBranch);
 
       // NOTE: There is a hidden dependency here, markBranchVisited
       // requires that we still be in the context of the branch
@@ -2442,13 +2422,18 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
-      if (branches.first && explore.first)
+      if (branches.first && explore.first) {
+        if (state.segment->follow.match(*ki))
+          branches.first->next_segment();
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
-      if (branches.second && explore.second)
-        transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+      }
 
-      if (state.segment->follow.match(*ki))
-          state.next_segment();
+      if (branches.second && explore.second) {
+        if (state.segment->follow.match(*ki))
+          branches.second->next_segment();
+        transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
+      }
+
     }
     break;
   }
@@ -3858,7 +3843,7 @@ void Executor::run(ExecutionState &initialState) {
   std::vector<ExecutionState *> newStates(states.begin(), states.end());
   searcher->update(0, newStates, std::vector<ExecutionState *>());
 
-  if (witness.property == Witness::Property::unreach_call)
+  if (witness.of_property(Witness::Property::unreach_call))
       ErrorFun = witness.error_function;
 
   // main interpreter loop
@@ -4267,34 +4252,34 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const char *suffix) {
 
   if ((*state.segment).follow.type == Witness::Type::Target
-          &&(*state.segment).follow.match(*state.pc)) {
+          &&(*state.segment).follow.match_target(state.getErrorLocation())) {
 
     switch (terminationType) {
     case StateTerminationType::Free:
-      if (witness.property == Witness::Property::valid_free) {
+      if (witness.of_property(Witness::Property::valid_free)) {
         klee_message("Valid violation witness: valid-free");
         haltExecution=true;
       }
       break;
     case StateTerminationType::Ptr:
     case StateTerminationType::BadVectorAccess:
-      if (witness.property == Witness::Property::valid_deref) {
+      if (witness.of_property(Witness::Property::valid_deref)) {
         klee_message("Valid violation witness: valid-deref");
         haltExecution=true;
       }
       break;
     case StateTerminationType::Overflow:
-      if (witness.property == Witness::Property::no_overflow) {
+      if (witness.of_property(Witness::Property::no_overflow)) {
         klee_message("Valid violation witness: no-overflow");
         haltExecution=true;
       }
       break;
     case StateTerminationType::Leak:
-      if (witness.property == Witness::Property::valid_memtrack) {
+      if (witness.of_property(Witness::Property::valid_memtrack)) {
         klee_message("Valid violation witness: valid-memtrack");
         haltExecution=true;
       }
-      if (witness.property == Witness::Property::valid_memcleanup) {
+      if (witness.of_property(Witness::Property::valid_memcleanup)) {
         klee_message("Valid violation witness: valid-memcleanup");
         haltExecution=true;
       }
@@ -4326,7 +4311,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
       if ((*state.segment).follow.type == Witness::Type::Target
           &&(*state.segment).follow.match(*state.pc)) {
-        if (witness.property == Witness::Property::valid_memcleanup) {
+        if (witness.of_property(Witness::Property::valid_memcleanup)) {
           klee_message("Valid violation witness: valid-memcleanup");
           haltExecution=true;
         }
@@ -6092,6 +6077,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
           state.addConstraint(constraint);
           state.next_segment();
         } else {
+            klee::klee_warning("Constraint not feasible");
             terminateState(state);
         }
     }

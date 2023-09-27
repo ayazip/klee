@@ -19,6 +19,8 @@
 #include "klee/Support/Casting.h"
 #include "klee/Support/ErrorHandling.h"
 #include "klee/Support/OptionCategories.h"
+#include "klee/Support/ErrorHandling.h"
+
 
 
 #include "llvm/IR/Function.h"
@@ -113,7 +115,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
                              : nullptr),
     coveredNew(state.coveredNew),
     forkDisabled(state.forkDisabled),
-    segment(state.segment){
+    segment(state.segment),
+    segment_number(state.segment_number){
   for (const auto &cur_mergehandler: openMergeStack)
     cur_mergehandler->addOpenState(this);
 }
@@ -392,6 +395,22 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
     out << "\n";
     target = sf.caller;
   }
+}
+
+// Get the line and column of the errror
+std::tuple<std::string, unsigned, unsigned> ExecutionState::getErrorLocation() const {
+  const KInstruction *target = prevPC;
+  for (ExecutionState::stack_ty::const_reverse_iterator
+         it = stack.rbegin(), ie = stack.rend();
+       it != ie; ++it) {
+    const StackFrame &sf = *it;
+    const InstructionInfo &ii = *target->info;
+
+    if (ii.file != "" && ii.line != 0 && ii.column != 0)
+      return {ii.file, ii.line, ii.column};
+    target = sf.caller;
+  }
+  klee::klee_error("Can't get error location for witness");
 }
 
 void ExecutionState::addConstraint(ref<Expr> e) {

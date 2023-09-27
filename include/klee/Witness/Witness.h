@@ -10,6 +10,8 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <set>
+
 
 namespace Witness {
 
@@ -44,10 +46,11 @@ namespace Witness {
   struct Waypoint {
     Type type;
     Location loc;
-    Location loc2;
+    Location loc2 = Location();
     std::string constraint = "true";
 
     bool match(const klee::KInstruction& ki,  unsigned type = 0);
+    bool match_target(std::tuple<std::string, unsigned, unsigned>);
     klee::ref<klee::Expr> get_return_constraint(klee::ref<klee::Expr> left);
 
   };
@@ -61,11 +64,13 @@ namespace Witness {
 
   struct ErrorWitness {
       std::vector<Segment> segments;
-      Property property;
+      std::set<Property> property;
       std::string error_function;
+
+      bool of_property(Property p) {return property.find(p) != property.end(); }
   };
 
-  Property get_property(const std::string& str);
+  std::set<Property> get_property(const std::string& str);
   std::string get_error_function(const std::string& str);
   ErrorWitness parse(const std::string& filename);
 
