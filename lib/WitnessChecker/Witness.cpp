@@ -90,7 +90,7 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
                 break;
             }
 
-            YAML::Node constraint = yaml_waypoint["constraint"]["string"];
+            YAML::Node constraint = yaml_waypoint["constraint"]["value"];
 
             if (constraint.Type() != YAML::NodeType::Undefined)
                 waypoint.constraint = constraint.as<std::string>();
