@@ -3778,6 +3778,18 @@ static const char *okExternalsList[] = { "printf",
                                          "modf",
                                          "modff",
                                          "modfl",
+                                         "exp",
+                                         "expf",
+                                         "expl",
+                                         "log",
+                                         "logf",
+                                         "logl",
+                                         "sqrt",
+                                         "sqrtf",
+                                         "sqrtl",
+                                         "tanh",
+                                         "tanhf",
+                                         "tanhl",
                                          "copysign",
                                          "copysignf",
                                          "copysignl",
@@ -3823,7 +3835,13 @@ static std::set<std::string> okExternals(okExternalsList,
 static std::set<std::string> nokExternals({"fesetround", "fesetenv",
                                            "feenableexcept", "fedisableexcept",
                                            "feupdateenv", "fesetexceptflag",
-                                           "feclearexcept", "feraiseexcept"});
+                                           "feclearexcept", "feraiseexcept",
+                                           "gettext", "dcgettext" , "longjmp", "fgets", "getmntent",
+                                           "__freading", "__fwriting", "fread", "fread_unlocked",
+                                           "strspn", "strtod",
+
+                                           // not sure how to handle these yet
+                                           "bindtextdomain", "setlocale"});
 
 void Executor::callExternalFunction(ExecutionState &state,
                                     KInstruction *target,
@@ -3835,6 +3853,9 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   if (ExternalCalls == ExternalCallPolicy::Pure &&
       nokExternals.count(function->getName()) > 0) {
+
+    klee_message("Calling unsupported function - witness refutation disabled.");
+    witness.refute = false;
     terminateStateOnError(state, "failed external call", User);
     return;
   }
