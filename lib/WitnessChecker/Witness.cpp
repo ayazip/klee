@@ -31,8 +31,10 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
 Witness::Location parse_location(YAML::Node yaml_waypoint, std::string key = "location"){
 
     Witness::Location loc;
+
     if (key == "location")
         loc.filename = yaml_waypoint[key]["file_name"].as<std::string>();
+
     if (yaml_waypoint[key]["line"].Type() == YAML::NodeType::Undefined)
         if (key == "location")
             klee::klee_error("Missing line number in location");
@@ -40,10 +42,9 @@ Witness::Location parse_location(YAML::Node yaml_waypoint, std::string key = "lo
             klee::klee_warning("Can't get target location, the result may not be accurate");
     else
         loc.line = yaml_waypoint[key]["line"].as<uint>();
+
     if (yaml_waypoint[key]["column"].Type() != YAML::NodeType::Undefined)
         loc.column = yaml_waypoint[key]["column"].as<uint>();
-    if (yaml_waypoint[key]["identifier"].Type() != YAML::NodeType::Undefined)
-        loc.identifier = yaml_waypoint[key]["identifier"].as<std::string>();
 
     return loc;
 
