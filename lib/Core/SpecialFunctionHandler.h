@@ -118,7 +118,6 @@ namespace klee {
     HANDLER(handleAssert);
     HANDLER(handleAssertFail);
     HANDLER(handleAssume);
-    HANDLER(handleValAssume);
     HANDLER(handleCalloc);
     HANDLER(handleCheckMemoryAccess);
     HANDLER(handleDefineFixedObject);
@@ -160,6 +159,7 @@ namespace klee {
     HANDLER(handleShiftOverflow);
     HANDLER(handleScopeEnter);
     HANDLER(handleScopeLeave);
+    HANDLER(handleValAssume);
     HANDLER(handleVerifierNondetInt);
     HANDLER(handleVerifierNondetUInt);
     HANDLER(handleVerifierNondetBool);
