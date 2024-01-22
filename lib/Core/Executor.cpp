@@ -1553,7 +1553,7 @@ void Executor::executeCall(ExecutionState &state,
   } else if (isErrorCall(f->getName())) {
       if (witness.get_spec(WitnessSpec::unreach_call) &&
           witness.get_err_function() == ErrorFun && state.inViolationNode()) {
-        confirmWitness("Valid violation witness: unreach-call");
+        confirmWitness("unreach-call");
       }
       terminateStateOnError(state,
                             "ASSERTION FAIL: " + ErrorFun + " called",
@@ -2201,6 +2201,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
       const FunctionType *fpType =
         dyn_cast<FunctionType>(cast<PointerType>(fp->getType())->getElementType());
+
+      if (f->getName() == "klee_report_error")
+        witness.refute = false;
 
       // special case the call with a bitcast case
       if (fType != fpType) {
@@ -3642,23 +3645,25 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      enum TerminateReason termReason,
                                      const char *suffix,
                                      const llvm::Twine &info) {
+  if (termReason == Exec)
+    witness.refute = false;
   if (state.inViolationNode()) {
     if (termReason == Free && witness.get_spec(WitnessSpec::valid_free)) {
-      confirmWitness("Valid violation witness: valid-free");
+      confirmWitness("valid-free");
     }
     if ((termReason == Ptr || termReason == BadVectorAccess) &&
             witness.get_spec(WitnessSpec::valid_deref)) {
-      confirmWitness("Valid violation witness: valid-deref");
+      confirmWitness("valid-deref");
     }
     if (termReason == Overflow && witness.get_spec(WitnessSpec::overflow)) {
-      confirmWitness("Valid violation witness: no-overflow");
+      confirmWitness("no-overflow");
     }
     if (termReason == Leak) {
       if (witness.get_spec(WitnessSpec::valid_memtrack)) {
-        confirmWitness("Valid violation witness: valid-memtrack");
+        confirmWitness("valid-memtrack");
       }
       if (witness.get_spec(WitnessSpec::valid_memcleanup)) {
-        confirmWitness("Valid violation witness: valid-memcleanup");
+        confirmWitness("valid-memcleanup");
       }
     }
   }
@@ -3684,7 +3689,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
       }
 
       if (state.inViolationNode() && witness.get_spec(WitnessSpec::valid_memcleanup)) {
-              confirmWitness("Valid violation witness: valid-memcleanup");
+              confirmWitness("valid-memcleanup");
       }
       if (shouldExitOn(Executor::Leak))
         haltExecution = true;
@@ -3728,6 +3733,9 @@ static const char *okExternalsList[] = { "printf",
                                          "strtoul",
                                          "putchar",
                                          "__ctype_b_loc",
+                                         "erf",
+                                         "erff",
+                                         "erfl"
                                          "rint",
                                          "rintf",
                                          "rintl",
@@ -3778,12 +3786,6 @@ static const char *okExternalsList[] = { "printf",
                                          "modf",
                                          "modff",
                                          "modfl",
-                                         "exp",
-                                         "expf",
-                                         "expl",
-                                         "log",
-                                         "logf",
-                                         "logl",
                                          "sqrt",
                                          "sqrtf",
                                          "sqrtl",
@@ -3823,6 +3825,24 @@ static const char *okExternalsList[] = { "printf",
                                          "memmove",
                                          "memcmp",
                                          "memset",
+                                         "sin",
+                                         "sinf",
+                                         "sinl",
+                                         "cos",
+                                         "cosf",
+                                         "cosl",
+                                         "exp",
+                                         "expf",
+                                         "expl",
+                                         "expm1",
+                                         "expm1f",
+                                         "expm1l",
+                                         "log",
+                                         "logf",
+                                         "logl",
+                                         "log1p",
+                                         "log1pf",
+                                         "log1pl",
                                          "fmodl",
                                          "getpid" };
 static std::set<std::string> okExternals(okExternalsList,
@@ -3836,17 +3856,18 @@ static std::set<std::string> nokExternals({"fesetround", "fesetenv",
                                            "feenableexcept", "fedisableexcept",
                                            "feupdateenv", "fesetexceptflag",
                                            "feclearexcept", "feraiseexcept",
-                                           "gettext", "dcgettext" , "longjmp", "fgets", "getmntent",
+                                           "gettext", "dcgettext" , "longjmp", "_setjmp", "setjmp",
+                                           "fgets", "getmntent",
                                            "__freading", "__fwriting", "fread", "fread_unlocked",
-                                           "strspn", "strtod",
-
-                                           // not sure how to handle these yet
+                                           "fcanf", "__isoc99_fscanf", "socket",
+                                           "strspn", "strtod", "strtok",
                                            "bindtextdomain", "setlocale"});
 
 void Executor::callExternalFunction(ExecutionState &state,
                                     KInstruction *target,
                                     Function *function,
                                     const std::vector<Cell> &arguments) {
+
   // check if specialFunctionHandler wants it
   if (specialFunctionHandler->handle(state, function, target, arguments))
     return;
@@ -3885,6 +3906,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     if (size > 64) {
         klee_warning_once(target, "Undefined function returns > 64bit object: %s",
                           function->getName().str().c_str());
+        witness.refute = false;
         terminateStateOnError(state, "failed external call", User);
     } else {
         bool isPointer = false;
@@ -4066,6 +4088,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   bool success = externalDispatcher->executeCall(function, target->inst, args);
   if (!success) {
+    witness.refute = false;
     terminateStateOnError(state, "failed external call: " + function->getName(),
                           External);
     return;
