@@ -1,9 +1,9 @@
 #ifndef WITNESS_H
 #define WITNESS_H
 
-#include "klee/Module/KInstruction.h"
+#include "klee/Internal/Module/KInstruction.h"
 #include "klee/Expr/Expr.h"
-#include "klee/Module/KValue.h"
+#include "klee/KValue.h"
 
 #include "llvm/IR/Instruction.h"
 

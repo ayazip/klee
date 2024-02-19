@@ -1835,6 +1835,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     if ((*state.segment).follow.type == Witness::Type::Target
               &&(*state.segment).follow.match_target(state.getErrorLocation())) {
         klee_message("Valid violation witness: unreach-call");
+        haltExecution=true;
     }
     terminateStateOnError(state,
                           "ASSERTION FAIL: " + ErrorFun + " called",
@@ -2410,8 +2411,22 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       cond = optimizer.optimizeExpr(cond, false);
       std::pair<bool,bool> explore = state.segment->get_condition_constraint(*ki);
 
-      if (explore.first && !explore.second) addConstraint(state, cond);
-      if (!explore.first && explore.second) addConstraint(state, Expr::createIsZero(cond));
+      if (cond->getKind() != Expr::Constant) {
+        if (explore.first && !explore.second) {
+          bool result;
+          bool success __attribute__ ((unused)) = solver->mayBeTrue(state, cond, result);
+          assert(success && "FIXME: Unhandled solver failure");
+          if (result)
+            addConstraint(state, cond);
+        }
+        if (!explore.first && explore.second) {
+          bool result;
+          bool success __attribute__ ((unused)) = solver->mustBeTrue(state, cond, result);
+          assert(success && "FIXME: Unhandled solver failure");
+          if (!result)
+            addConstraint(state, Expr::createIsZero(cond));
+          }
+      }
 
       Executor::StatePair branches = fork(state, cond, false, BranchType::ConditionalBranch);
 
@@ -4533,6 +4548,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     if (size > 64) {
         klee_warning_once(target, "Undefined function returns > 64bit object: %s",
                           function->getName().str().c_str());
+        klee_warning_once(target, "Witness may not be confirmed.");
         terminateStateOnUserError(state, "failed external call");
         return;
     }
