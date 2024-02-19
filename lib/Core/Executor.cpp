@@ -2414,14 +2414,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (cond->getKind() != Expr::Constant) {
         if (explore.first && !explore.second) {
           bool result;
-          bool success __attribute__ ((unused)) = solver->mayBeTrue(state, cond, result);
+          bool success __attribute__ ((unused)) = solver->mayBeTrue(state.constraints, cond, result,
+                                                                    state.queryMetaData);
           assert(success && "FIXME: Unhandled solver failure");
           if (result)
             addConstraint(state, cond);
         }
         if (!explore.first && explore.second) {
           bool result;
-          bool success __attribute__ ((unused)) = solver->mustBeTrue(state, cond, result);
+          bool success __attribute__ ((unused)) = solver->mustBeTrue(state.constraints, cond, result,
+                                                                     state.queryMetaData);
           assert(success && "FIXME: Unhandled solver failure");
           if (!result)
             addConstraint(state, Expr::createIsZero(cond));
