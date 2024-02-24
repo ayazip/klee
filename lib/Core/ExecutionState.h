@@ -364,7 +364,6 @@ public:
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
   void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
   void next_segment() { segment = std::next(segment); segment_number++; }
-  std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
 };
 
 struct ExecutionStateIDCompare {

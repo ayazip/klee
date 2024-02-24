@@ -397,22 +397,6 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   }
 }
 
-// Get the line and column of the errror
-std::tuple<std::string, unsigned, unsigned> ExecutionState::getErrorLocation() const {
-  const KInstruction *target = prevPC;
-  for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack.rbegin(), ie = stack.rend();
-       it != ie; ++it) {
-    const StackFrame &sf = *it;
-    const InstructionInfo &ii = *target->info;
-
-    if (ii.file != "" && ii.line != 0 && ii.column != 0)
-      return {ii.file, ii.line, ii.column};
-    target = sf.caller;
-  }
-  klee::klee_error("Can't get error location for witness");
-}
-
 void ExecutionState::addConstraint(ref<Expr> e) {
   ConstraintManager c(constraints);
   c.addConstraint(e);
