@@ -197,18 +197,7 @@ bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
         return (ki.inst->getOpcode() == llvm::Instruction::Br);
 
     case Witness::Type::Enter:
-        if (ki.inst->getOpcode() != llvm::Instruction::Call || t == llvm::Instruction::Ret)
-            return false;
-        if (!loc.identifier.empty()) {
-
-            const llvm::CallBase &cs = llvm::cast<llvm::CallBase>(*ki.inst);
-            llvm::Function *f = cs.getCalledFunction();
-            if (f != nullptr) {
-                std::string name = f->getName();
-                return (loc.identifier == name);
-            }
-        }
-        return true;
+        return (ki.inst->getOpcode() == llvm::Instruction::Call && t != llvm::Instruction::Ret);;
 
     case Witness::Type::Return:
         return (t == llvm::Instruction::Ret);
