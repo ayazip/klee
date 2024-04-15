@@ -152,7 +152,14 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__VERIFIER_nondet_ushort", handleVerifierNondetUShort, true),
 
   add("__VERIFIER_assume", handleAssume, false),
+
   add("__VALIDATOR_assume", handleValAssume, false),
+  add("__VALIDATOR_segment", handleValSegment, true),
+  add("__VALIDATOR_branch", handleValBranch, true),
+  add("__VALIDATOR_switch", handleValSwitch, true),
+
+
+
 
 #ifdef SUPPORT_KLEE_EH_CXX
   add("_klee_eh_Unwind_RaiseException_impl", handleEhUnwindRaiseExceptionImpl, false),
@@ -606,18 +613,14 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
 void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
                             KInstruction *target,
                             const std::vector<Cell> &arguments) {
-  assert(arguments.size()==3 && "invalid number of arguments to validator_assume");
-
-  ConstantExpr *s = cast<ConstantExpr>(arguments[1].value);
-  if (s->getAPValue() != state.segment_number)
-      return;
+  assert(arguments.size()==2 && "invalid number of arguments to validator_assume");
 
   ref<Expr> e = arguments[0].value;
 
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
 
-  ConstantExpr *follow = cast<ConstantExpr>(arguments[2].value);
+  ConstantExpr *follow = cast<ConstantExpr>(arguments[1].value);
   if (follow->getAPValue() == 0)
       e = NotExpr::create(e);
 
@@ -636,7 +639,143 @@ void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
     executor.addConstraint(state, e);
     if (follow->getAPValue() == 1)
         state.next_segment();
+  }
+}
+
+void SpecialFunctionHandler::handleValSegment(ExecutionState &state,
+                            KInstruction *target,
+                            const std::vector<Cell> &arguments) {
+
+  assert(arguments.size()==1 && "invalid number of arguments to validator_segment");
+  ConstantExpr *s = cast<ConstantExpr>(arguments[0].value);
+
+  executor.bindLocal(target, state,
+                     KValue(ConstantExpr::create(
+                                s->getAPValue() == state.segment_number, 32)));
+}
+
+void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
+                            KInstruction *target,
+                            const std::vector<Cell> &arguments) {
+
+  assert(arguments.size()==3 && "invalid number of arguments to validator_branch");
+
+  ConstantExpr *l = cast<ConstantExpr>(arguments[0].value);
+  ConstantExpr *c = cast<ConstantExpr>(arguments[1].value);
+
+  uint64_t line = l->getZExtValue();
+  uint64_t col  = c->getZExtValue();
+
+  ref<Expr> cond = NotExpr::create(arguments[2].createIsZero());
+  std::pair<bool,bool> explore = state.segment->get_condition_constraint(line, col);
+
+  // if (cond->getWidth() != Expr::Bool)
+  //  cond = NeExpr::create(cond, ConstantExpr::alloc(0, cond->getWidth()));
+
+  cond = executor.optimizer.optimizeExpr(cond, false);
+
+
+  if (cond->getKind() == Expr::Constant) {
+    if ((explore.first && !explore.second && cond->isFalse()) ||
+          (!explore.first && explore.second && cond->isTrue())) {
+        klee_warning("Witness specifies an infeasible path");
+        executor.terminateState(state);
+      }
+    if (state.segment->follow.loc.match(line, col))
+      state.next_segment();
+    executor.bindLocal(target, state, arguments[2]);
+    return;
+  }
+
+  bool result;
+  if (explore.first && !explore.second) {
+      bool success __attribute__ ((unused)) = executor.solver->mayBeTrue(
+                  state.constraints, cond, result, state.queryMetaData);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (result)
+        executor.addConstraint(state, cond);
+      else {
+        klee_warning("Witness specifies an infeasible path");
+        executor.terminateState(state);
+      }
+  }
+  if (!explore.first && explore.second) {
+      bool success __attribute__ ((unused)) = executor.solver->mustBeTrue(
+                  state.constraints, cond, result, state.queryMetaData);
+      assert(success && "FIXME: Unhandled solver failure");
+      if (!result)
+        executor.addConstraint(state, Expr::createIsZero(cond));
+      else {
+        klee_warning("Witness specifies an infeasible path");
+        executor.terminateState(state);
+      }
+  }
+
+  if (state.segment->follow.loc.match(line, col))
+      state.next_segment();
+  executor.bindLocal(target, state, arguments[2]);
+}
+
+void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
+                            KInstruction *target,
+                            const std::vector<Cell> &arguments) {
+
+    assert(arguments.size()==3 && "invalid number of arguments to validator_switch");
+
+    ConstantExpr *l = cast<ConstantExpr>(arguments[0].value);
+    ConstantExpr *c = cast<ConstantExpr>(arguments[1].value);
+
+    uint64_t line = l->getZExtValue();
+    uint64_t col  = c->getZExtValue();
+
+    for (auto avoid : state.segment->avoid) {
+        if (line != avoid.loc.line || col != avoid.loc.column)
+            continue;
+
+        if (avoid.constraint == "default"){
+            state.avoidDef = true;
+            continue;
+        }
+
+        int value = avoid.get_switch_value();
+        auto cond = EqExpr::create(arguments[2].value,
+                    klee::ConstantExpr::alloc(llvm::APInt(arguments[2].getWidth(),
+                                              value, true)));
+
+        bool result;
+        bool success __attribute__ ((unused)) = executor.solver->mustBeTrue(
+                    state.constraints, cond, result, state.queryMetaData);
+        assert(success && "FIXME: Unhandled solver failure");
+        if (result){
+            executor.terminateState(state);
+            return;
+        }
+        executor.addConstraint(state, NotExpr::create(cond));
     }
+
+    auto follow = state.segment->follow;
+    if (line == follow.loc.line && col == follow.loc.column) {
+        if (follow.constraint == "default"){
+            if (state.avoidDef)
+                klee_error("Conflicting information in witness!");
+            state.followDef = true;
+        } else {
+            int value = follow.get_switch_value();
+            auto cond = EqExpr::create(arguments[2].value,
+                        klee::ConstantExpr::alloc(llvm::APInt(arguments[2].getWidth(),
+                                                  value, true)));
+            bool result;
+            bool success __attribute__ ((unused)) = executor.solver->mayBeTrue(
+                        state.constraints, cond, result, state.queryMetaData);
+            assert(success && "FIXME: Unhandled solver failure");
+            if (!result)
+                executor.terminateState(state);
+            executor.addConstraint(state, cond);
+        }
+        state.next_segment();
+    }
+    executor.bindLocal(target, state, arguments[2]);
+
 }
 
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,

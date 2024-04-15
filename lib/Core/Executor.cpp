@@ -2409,27 +2409,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       ref<Expr> cond = eval(ki, 0, state).value;
 
       cond = optimizer.optimizeExpr(cond, false);
-      std::pair<bool,bool> explore = state.segment->get_condition_constraint(*ki);
-
-      if (cond->getKind() != Expr::Constant) {
-        if (explore.first && !explore.second) {
-          bool result;
-          bool success __attribute__ ((unused)) = solver->mayBeTrue(state.constraints, cond, result,
-                                                                    state.queryMetaData);
-          assert(success && "FIXME: Unhandled solver failure");
-          if (result)
-            addConstraint(state, cond);
-        }
-        if (!explore.first && explore.second) {
-          bool result;
-          bool success __attribute__ ((unused)) = solver->mustBeTrue(state.constraints, cond, result,
-                                                                     state.queryMetaData);
-          assert(success && "FIXME: Unhandled solver failure");
-          if (!result)
-            addConstraint(state, Expr::createIsZero(cond));
-          }
-      }
-
       Executor::StatePair branches = fork(state, cond, false, BranchType::ConditionalBranch);
 
       // NOTE: There is a hidden dependency here, markBranchVisited
@@ -2439,19 +2418,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (statsTracker && state.stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
-      if (branches.first && explore.first) {
-        if (state.segment->follow.match(*ki))
-          branches.first->next_segment();
+      if (branches.first)
         transferToBasicBlock(bi->getSuccessor(0), bi->getParent(), *branches.first);
-      }
 
-      if (branches.second && explore.second) {
-        if (state.segment->follow.match(*ki))
-          branches.second->next_segment();
+      if (branches.second)
         transferToBasicBlock(bi->getSuccessor(1), bi->getParent(), *branches.second);
-      }
-
-    }
+     }
     break;
   }
   case Instruction::IndirectBr: {
@@ -2534,13 +2506,24 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> cond = eval(ki, 0, state).value;
     BasicBlock *bb = si->getParent();
 
+    bool followDef = state.followDef;
+    bool avoidDef = state.avoidDef;
+    state.followDef = false;
+    state.avoidDef = false;
+
     cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
       // Somewhat gross to create these all the time, but fine till we
       // switch to an internal rep.
       llvm::IntegerType *Ty = cast<IntegerType>(si->getCondition()->getType());
       ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
+
       unsigned index = si->findCaseValue(ci)->getSuccessorIndex();
+      if ((avoidDef && index == SwitchInst::DefaultPseudoIndex) ||
+              (followDef && index != SwitchInst::DefaultPseudoIndex)) {
+        terminateState(state);
+        break;
+      }
       transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
     } else {
       // Handle possible different branch targets
@@ -2564,63 +2547,67 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // Track default branch values
       ref<Expr> defaultValue = ConstantExpr::alloc(1, Expr::Bool);
 
-      // iterate through all non-default cases but in order of the expressions
-      for (std::map<ref<Expr>, BasicBlock *>::iterator
-               it = expressionOrder.begin(),
-               itE = expressionOrder.end();
-           it != itE; ++it) {
-        ref<Expr> match = EqExpr::create(cond, it->first);
+      if (!followDef) {
+          // iterate through all non-default cases but in order of the expressions
+          for (std::map<ref<Expr>, BasicBlock *>::iterator
+                   it = expressionOrder.begin(),
+                   itE = expressionOrder.end();
+               it != itE; ++it) {
+            ref<Expr> match = EqExpr::create(cond, it->first);
 
-        // skip if case has same successor basic block as default case
-        // (should work even with phi nodes as a switch is a single terminating instruction)
-        if (it->second == si->getDefaultDest()) continue;
+            // skip if case has same successor basic block as default case
+            // (should work even with phi nodes as a switch is a single terminating instruction)
+            if (it->second == si->getDefaultDest()) continue;
 
-        // Make sure that the default value does not contain this target's value
-        defaultValue = AndExpr::create(defaultValue, Expr::createIsZero(match));
+            // Make sure that the default value does not contain this target's value
+            defaultValue = AndExpr::create(defaultValue, Expr::createIsZero(match));
 
-        // Check if control flow could take this case
-        bool result;
-        match = optimizer.optimizeExpr(match, false);
-        bool success = solver->mayBeTrue(state.constraints, match, result,
-                                         state.queryMetaData);
-        assert(success && "FIXME: Unhandled solver failure");
-        (void) success;
-        if (result) {
-          BasicBlock *caseSuccessor = it->second;
+            // Check if control flow could take this case
+            bool result;
+            match = optimizer.optimizeExpr(match, false);
+            bool success = solver->mayBeTrue(state.constraints, match, result,
+                                             state.queryMetaData);
+            assert(success && "FIXME: Unhandled solver failure");
+            (void) success;
+            if (result) {
+              BasicBlock *caseSuccessor = it->second;
 
-          // Handle the case that a basic block might be the target of multiple
-          // switch cases.
-          // Currently we generate an expression containing all switch-case
-          // values for the same target basic block. We spare us forking too
-          // many times but we generate more complex condition expressions
-          // TODO Add option to allow to choose between those behaviors
-          std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> res =
-              branchTargets.insert(std::make_pair(
-                  caseSuccessor, ConstantExpr::alloc(0, Expr::Bool)));
+              // Handle the case that a basic block might be the target of multiple
+              // switch cases.
+              // Currently we generate an expression containing all switch-case
+              // values for the same target basic block. We spare us forking too
+              // many times but we generate more complex condition expressions
+              // TODO Add option to allow to choose between those behaviors
+              std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> res =
+                  branchTargets.insert(std::make_pair(
+                      caseSuccessor, ConstantExpr::alloc(0, Expr::Bool)));
 
-          res.first->second = OrExpr::create(match, res.first->second);
+              res.first->second = OrExpr::create(match, res.first->second);
 
-          // Only add basic blocks which have not been target of a branch yet
-          if (res.second) {
-            bbOrder.push_back(caseSuccessor);
+              // Only add basic blocks which have not been target of a branch yet
+              if (res.second) {
+                bbOrder.push_back(caseSuccessor);
+              }
+            }
           }
-        }
       }
 
-      // Check if control could take the default case
-      defaultValue = optimizer.optimizeExpr(defaultValue, false);
-      bool res;
-      bool success = solver->mayBeTrue(state.constraints, defaultValue, res,
-                                       state.queryMetaData);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
-      if (res) {
-        std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> ret =
-            branchTargets.insert(
-                std::make_pair(si->getDefaultDest(), defaultValue));
-        if (ret.second) {
-          bbOrder.push_back(si->getDefaultDest());
-        }
+      if (!avoidDef) {
+          // Check if control could take the default case
+          defaultValue = optimizer.optimizeExpr(defaultValue, false);
+          bool res;
+          bool success = solver->mayBeTrue(state.constraints, defaultValue, res,
+                                           state.queryMetaData);
+          assert(success && "FIXME: Unhandled solver failure");
+          (void) success;
+          if (res) {
+            std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> ret =
+                branchTargets.insert(
+                    std::make_pair(si->getDefaultDest(), defaultValue));
+            if (ret.second) {
+              bbOrder.push_back(si->getDefaultDest());
+            }
+          }
       }
 
       // Fork the current state with each state having one of the possible

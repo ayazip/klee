@@ -325,6 +325,12 @@ public:
   ///@brief Tracks the current segment in the witness
   uint64_t segment_number = 0;
 
+  ///@brief For witness tracking: in the nearest switch avoid the default branch
+  bool avoidDef = false;
+
+  ///@brief For witness tracking: in the nearest switch follow the default branch
+  bool followDef = false;
+
 public:
 #ifdef KLEE_UNITTEST
   // provide this function only in the context of unittests

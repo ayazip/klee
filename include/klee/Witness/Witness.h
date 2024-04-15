@@ -40,7 +40,7 @@ namespace Witness {
     uint64_t column = 0;
     std::string identifier = "";
 
-    bool match(const klee::KInstruction &ki);
+    bool match(uint64_t line, uint64_t col);
   };
 
   struct Waypoint {
@@ -52,6 +52,7 @@ namespace Witness {
     bool match(const klee::KInstruction& ki,  unsigned type = 0);
     bool match_target(std::tuple<std::string, unsigned, unsigned>);
     klee::ref<klee::Expr> get_return_constraint(klee::ref<klee::Expr> left);
+    int get_switch_value();
 
   };
 
@@ -59,7 +60,7 @@ namespace Witness {
     std::vector<Waypoint> avoid;
     Waypoint follow;
     std::set<size_t> check_avoid(const klee::KInstruction& ki, unsigned type = 0);
-    std::pair<bool, bool> get_condition_constraint(const klee::KInstruction &ki);
+    std::pair<bool, bool> get_condition_constraint(uint64_t line, uint64_t col);
   };
 
   struct ErrorWitness {

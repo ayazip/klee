@@ -24,7 +24,7 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
         return Witness::Type::Enter;
     if (yaml_waypoint["type"].as<std::string>() == "target")
         return Witness::Type::Target;
-    return Witness::Type::Undefined;
+    klee::klee_error("Invalid waypoint type!");
 
 }
 
@@ -134,10 +134,8 @@ std::set<size_t> Witness::Segment::check_avoid(const klee::KInstruction& ki, uns
 }
 
 
-bool Witness::Location::match(const klee::KInstruction &ki) {
-    return (ki.info->line == line
-        && (!column || ki.info->column == column));
-       // && (filename == ki.info->file));
+bool Witness::Location::match(uint64_t l, uint64_t c) {
+    return (l == line && c == column);
 }
 
 
@@ -188,13 +186,11 @@ std::string Witness::get_error_function(const std::string& str){
 bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
     // in case of returns, ki is the caller and we match the callsite location
-    if (!loc.match(ki) && type != Type::Target)
+    if (!loc.match(ki.info->line, ki.info->column) && type != Type::Target)
         return false;
 
     switch (type) {
 
-    case Witness::Type::Branch:
-        return (ki.inst->getOpcode() == llvm::Instruction::Br);
 
     case Witness::Type::Enter:
         return (ki.inst->getOpcode() == llvm::Instruction::Call && t != llvm::Instruction::Ret);;
@@ -235,14 +231,15 @@ bool Witness::Waypoint::match_target(std::tuple<std::string, unsigned, unsigned>
     return std::get<1>(error_loc) > loc.line && std::get<1>(error_loc) < loc2.line;
 }
 
-std::pair<bool, bool> Witness::Segment::get_condition_constraint(const klee::KInstruction &ki) {
+std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, uint64_t col) {
 
-    std::set<size_t> indices = check_avoid(ki);
+    std::set<size_t> indices;
+
     bool go_true = true;
     bool go_false = true;
 
     // go_x is set to false if the follow waypoint says to take the !x branch
-    if (follow.type ==  Witness::Type::Branch && follow.match(ki)) {
+    if (follow.type ==  Witness::Type::Branch && follow.loc.match(line, col)) {
         bool result = get_value(follow.constraint);
         go_true = result;
         go_false = !result;
@@ -254,17 +251,17 @@ std::pair<bool, bool> Witness::Segment::get_condition_constraint(const klee::KIn
     bool avoid_true = !go_true;
     bool avoid_false = !go_false;
 
-    for (size_t i : indices) {
-        assert(avoid[i].type ==  Witness::Type::Branch);
-        bool avoid_value = get_value(avoid[i].constraint);
+    for (size_t i=0; i<avoid.size(); i++) {
+        if (avoid[i].type == Witness::Type::Branch && avoid[i].loc.match(line, col)) {
 
-        // follow false and avoid false, or folow true and avoid true, cause an error
-        if ((!go_true && !avoid_value) || (!go_false && avoid_value))
-            klee::klee_error("Conflicting branching info in segment");
-
-        avoid_true = avoid_true || avoid_value;
-        avoid_false = avoid_false || !avoid_value;
+            bool avoid_value = get_value(avoid[i].constraint);
+            if ((!go_true && !avoid_value) || (!go_false && avoid_value))
+                klee::klee_error("Conflicting branching info in segment");
+            avoid_true = avoid_true || avoid_value;
+            avoid_false = avoid_false || !avoid_value;
+        }
     }
+
     return std::make_pair(!avoid_true, !avoid_false);
 
 }
@@ -339,8 +336,6 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
                                                       is_signed ? s_value : u_value,
                                                       is_signed)));
 
-//    klee::EqExpr eq = klee::EqExpr(left, right);
-//    klee::ref<klee::Expr> cmp =  klee::ref<klee::Expr>(eq);
     if (op == "==")
         return (klee::EqExpr::alloc(left, right));
     if (op == "!=")
@@ -365,4 +360,12 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
             return klee::UleExpr::alloc(left, right);
     }
     klee::klee_error("Invalid operand in return constraint");
+}
+
+int Witness::Waypoint::get_switch_value(){
+    size_t idx = 0;
+    int value = std::stoi(constraint, &idx, 0);
+    if (idx != constraint.size())
+        klee::klee_error("Can't parse switch constraint value");
+    return value;
 }
