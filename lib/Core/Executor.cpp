@@ -2618,6 +2618,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
            it != ie; ++it) {
         conditions.push_back(branchTargets[*it]);
       }
+
+      if (conditions.size() == 0){
+          terminateState(state);
+          break;
+      }
+
       std::vector<ExecutionState*> branches;
       branch(state, conditions, branches, BranchType::Switch);
 

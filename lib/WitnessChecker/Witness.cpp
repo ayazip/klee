@@ -20,7 +20,7 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
         return Witness::Type::Branch;
     if (yaml_waypoint["type"].as<std::string>() == "function_return")
         return Witness::Type::Return;
-    if (yaml_waypoint["type"].as<std::string>() == "identifier_evaluation")
+    if (yaml_waypoint["type"].as<std::string>() == "function_enter")
         return Witness::Type::Enter;
     if (yaml_waypoint["type"].as<std::string>() == "target")
         return Witness::Type::Target;
@@ -233,8 +233,6 @@ bool Witness::Waypoint::match_target(std::tuple<std::string, unsigned, unsigned>
 
 std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, uint64_t col) {
 
-    std::set<size_t> indices;
-
     bool go_true = true;
     bool go_false = true;
 
@@ -245,9 +243,6 @@ std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, 
         go_false = !result;
     }
 
-    if (indices.empty())
-        return std::make_pair(go_true, go_false);
-
     bool avoid_true = !go_true;
     bool avoid_false = !go_false;
 
@@ -255,8 +250,10 @@ std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, 
         if (avoid[i].type == Witness::Type::Branch && avoid[i].loc.match(line, col)) {
 
             bool avoid_value = get_value(avoid[i].constraint);
-            if ((!go_true && !avoid_value) || (!go_false && avoid_value))
-                klee::klee_error("Conflicting branching info in segment");
+            if ((!go_true && !avoid_value) || (!go_false && avoid_value)) {
+                klee::klee_warning("Conflicting branching info in segment");
+                return std::make_pair(false, false);
+            }
             avoid_true = avoid_true || avoid_value;
             avoid_false = avoid_false || !avoid_value;
         }

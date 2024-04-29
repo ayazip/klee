@@ -667,7 +667,14 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
   uint64_t col  = c->getZExtValue();
 
   ref<Expr> cond = NotExpr::create(arguments[2].createIsZero());
+
   std::pair<bool,bool> explore = state.segment->get_condition_constraint(line, col);
+  if (!explore.first && !explore.second) {
+      executor.haltExecution = true;
+      executor.terminateState(state);
+      return;
+  }
+
 
   // if (cond->getWidth() != Expr::Bool)
   //  cond = NeExpr::create(cond, ConstantExpr::alloc(0, cond->getWidth()));
@@ -678,8 +685,9 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
   if (cond->getKind() == Expr::Constant) {
     if ((explore.first && !explore.second && cond->isFalse()) ||
           (!explore.first && explore.second && cond->isTrue())) {
-        klee_warning("Witness specifies an infeasible path");
+        klee_warning("Infeasible path, killing state");
         executor.terminateState(state);
+        return;
       }
     if (state.segment->follow.loc.match(line, col))
       state.next_segment();
@@ -695,7 +703,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
       if (result)
         executor.addConstraint(state, cond);
       else {
-        klee_warning("Witness specifies an infeasible path");
+        klee_warning("Infeasible path, killing state");
         executor.terminateState(state);
       }
   }
@@ -706,7 +714,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
       if (!result)
         executor.addConstraint(state, Expr::createIsZero(cond));
       else {
-        klee_warning("Witness specifies an infeasible path");
+        klee_warning("Infeasible path, killing state");
         executor.terminateState(state);
       }
   }
@@ -756,8 +764,12 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
     auto follow = state.segment->follow;
     if (line == follow.loc.line && col == follow.loc.column) {
         if (follow.constraint == "default"){
-            if (state.avoidDef)
-                klee_error("Conflicting information in witness!");
+            if (state.avoidDef){
+                klee_warning("Conflicting information in witness, refuting");
+                executor.haltExecution = true;
+                executor.terminateState(state);
+                return;
+            }
             state.followDef = true;
         } else {
             int value = follow.get_switch_value();
@@ -768,8 +780,10 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
             bool success __attribute__ ((unused)) = executor.solver->mayBeTrue(
                         state.constraints, cond, result, state.queryMetaData);
             assert(success && "FIXME: Unhandled solver failure");
-            if (!result)
+            if (!result){
                 executor.terminateState(state);
+                return;
+            }
             executor.addConstraint(state, cond);
         }
         state.next_segment();
