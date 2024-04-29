@@ -331,6 +331,9 @@ public:
   ///@brief For witness tracking: in the nearest switch follow the default branch
   bool followDef = false;
 
+  ///@brief Set to true while evaluating a witness assumption
+  bool witAssume = false;
+
 public:
 #ifdef KLEE_UNITTEST
   // provide this function only in the context of unittests

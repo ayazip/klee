@@ -4261,6 +4261,11 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &info,
                                      const char *suffix) {
 
+  if (state.witAssume) {
+      klee_warning("Error in evaluation of waypoint constraint");
+      haltExecution = true;
+  }
+
   if ((*state.segment).follow.type == Witness::Type::Target
           &&(*state.segment).follow.match_target(state.getErrorLocation())) {
 

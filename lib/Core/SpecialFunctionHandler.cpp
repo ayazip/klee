@@ -616,6 +616,8 @@ void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
                             const std::vector<Cell> &arguments) {
   assert(arguments.size()==2 && "invalid number of arguments to validator_assume");
 
+  state.witAssume = false;
+
   ref<Expr> e = arguments[0].value;
 
   if (e->getWidth() != Expr::Bool)
@@ -649,6 +651,9 @@ void SpecialFunctionHandler::handleValSegment(ExecutionState &state,
 
   assert(arguments.size()==1 && "invalid number of arguments to validator_segment");
   ConstantExpr *s = cast<ConstantExpr>(arguments[0].value);
+
+  if (s->getZExtValue() == state.segment_number)
+    state.witAssume = true;
 
   executor.bindLocal(target, state,
                      KValue(ConstantExpr::create(
