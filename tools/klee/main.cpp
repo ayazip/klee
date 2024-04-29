@@ -1161,6 +1161,7 @@ static const char *modelledExternals[] = {
   "__ubsan_handle_mul_overflow",
   "__ubsan_handle_divrem_overflow",
   "__ubsan_handle_shift_out_of_bounds",
+  "__ubsan_handle_negate_overflow",
   "__VERIFIER_scope_enter",
   "__VERIFIER_scope_leave",
   "__VERIFIER_nondet_bool",
