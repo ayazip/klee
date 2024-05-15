@@ -159,7 +159,6 @@ std::set<Witness::Property> Witness::get_property(const std::string& str){
 }
 
 std::string Witness::get_error_function(const std::string& str){
-    /*
     size_t pos;
     if ((pos = str.find("G ! call(")) != std::string::npos) {
         pos += 9;
@@ -174,13 +173,8 @@ std::string Witness::get_error_function(const std::string& str){
             return str.substr(pos, len);
         else
             klee::klee_error("Invalid specification: missing error function");
-        return ""
     }
-    */
-
-    /* SV-COMP */
-    assert(str.find("reach_error") != std::string::npos);
-    return "reach_error";
+    return "";
 }
 
 bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
