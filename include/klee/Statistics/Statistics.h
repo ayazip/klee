@@ -12,6 +12,7 @@
 
 #include "Statistic.h"
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <string.h>
