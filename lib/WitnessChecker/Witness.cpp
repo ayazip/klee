@@ -298,24 +298,22 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
         len++;
 
     std::string result = constraint.substr(start, len);
-    klee::Expr::Width width = (*left.get()).getWidth();
-
+    klee::Expr::Width width = (*left.get()).getWidth();  
 
     int64_t s_value = 0;
     uint64_t u_value = 0;
-    bool is_signed = true;
+    bool is_signed = false;
 
     if (isdigit(result[0]) || result[0] == '-') {
         size_t end;
-        if(result[result.size() - 1] == 'u' || result[result.size() - 1] == 'U') {
-            is_signed = false;
-            u_value = std::stoull(result, &end, 0);
-            end++;
-        } else
+        if(result[0] == '-') {
+            is_signed = true;
             s_value = std::stoll(result, &end, 0);
+        } else
+            u_value = std::stoull(result, &end, 0);
 
         if (end != result.size())
-            klee::klee_warning("Cant parse return constraint");
+            klee::klee_error("Cant parse return constraint");
 
     } else {
         klee::klee_error("Cant parse return constraint");
