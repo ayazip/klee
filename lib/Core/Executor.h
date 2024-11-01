@@ -633,9 +633,9 @@ public:
   void checkWidthMatch(KValue &left, KValue &right) const;
   void handleICMPForLazyMO(ExecutionState &state, KValue &value);
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() override { return errorLoc; }
-  void setWitness(Witness::ErrorWitness w) { witness = w; };
+  void setWitness(Witness::ErrorWitness w) override { witness = w; };
   void insert_constraint(ref<Expr> left, ExecutionState& state,
-                                   const KInstruction& ki, unsigned type);
+                         KInstruction& ki, unsigned type, const llvm::Type& return_type);
 };
   
 } // End klee namespace

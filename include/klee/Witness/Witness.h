@@ -1,6 +1,7 @@
 #ifndef WITNESS_H
 #define WITNESS_H
 
+#include "klee/Core/ConcreteValue.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Module/KValue.h"
@@ -51,8 +52,10 @@ namespace Witness {
 
     bool match(const klee::KInstruction& ki,  unsigned type = 0);
     bool match_target(std::tuple<std::string, unsigned, unsigned>);
-    klee::ref<klee::Expr> get_return_constraint(klee::ref<klee::Expr> left);
+    klee::ref<klee::Expr> get_return_constraint(klee::ref<klee::Expr> left, const llvm::Type& type);
     int get_switch_value();
+    std::pair<std::string, std::string> parse_constraint();
+    llvm::APFloat get_float_initializer(std::string, const llvm::Type&);
 
   };
 

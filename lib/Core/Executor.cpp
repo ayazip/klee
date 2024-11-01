@@ -1384,7 +1384,7 @@ Executor::toConstant(ExecutionState &state,
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
      << " to value " << value << " (" << (*(state.pc)).info->file << ":"
-     << (*(state.pc)).info->line << ")";
+     << (*(state.pc)).info->line << ") \n";
   os << "Witness may not be confirmed.";
 
   if (AllExternalWarnings)
@@ -2383,7 +2383,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             }
           }
 
-          insert_constraint(result.value, state, *kcaller, i->getOpcode());
+          insert_constraint(result.value, state, *kcaller, i->getOpcode(), *t);
 
           bindLocal(kcaller, state, result);
         }
@@ -4511,7 +4511,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (specialFunctionHandler->handle(state, function, target, arguments)) {
       if (function->getName().startswith("__VERIFIER_nondet")) {
           ref<Expr> left = getDestCell(state, target).value;
-          insert_constraint(left, state, *target, Instruction::Ret);
+          insert_constraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
       }
 
     return;
@@ -6060,13 +6060,13 @@ void Executor::setReplayNondet(const struct KTest *out) {
 
 
 void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
-                                 const KInstruction& ki, unsigned type) {
+                                 KInstruction& ki, unsigned type, const Type& return_type) {
 
     Witness::Segment current =  *state.segment;
 
     for (auto index : current.check_avoid(ki, type)){
       Witness::Waypoint avoid = current.avoid[index];
-      ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(left));
+      ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(left, return_type));
 
       bool feasible;
       bool success __attribute__((unused)) = solver->mayBeTrue(
@@ -6082,7 +6082,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
     if (state.segment != witness.segments.end()
             && current.follow.match(ki, type)) {
 
-        ref<Expr> constraint = current.follow.get_return_constraint(left);
+         ref<Expr> constraint = current.follow.get_return_constraint(left, return_type);
 
         bool feasible;
         bool success __attribute__((unused)) = solver->mayBeTrue(

@@ -1260,6 +1260,7 @@ void SpecialFunctionHandler::handleVerifierNondetType(ExecutionState &state,
 
   // create nondet value if we are not replaying
   if (executor.replayNondet.empty()) {
+
     executor.bindLocal(target, state,
                        executor.createNondetValue(state, size,
                                                   isSigned, target,

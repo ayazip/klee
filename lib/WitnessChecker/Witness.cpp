@@ -266,64 +266,101 @@ bool get_value(const std::string& constraint){
 
 }
 
-klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::Expr> left){
+std::pair<std::string, std::string> Witness::Waypoint::parse_constraint(){
+  size_t start = constraint.find("\\result");
 
-    size_t start = constraint.find("\\result");
+  if (start == std::string::npos)
+    klee::klee_error("invalid constraint");
 
-    if (start == std::string::npos)
-        klee::klee_error("invalid constraint");
+  std::string op;
 
-    std::string op;
+  start += 7;
+  while (start < constraint.size() && (constraint[start] == ' '))
+    start++;
 
-    start += 7;
-    while (start < constraint.size() && (constraint[start] == ' '))
-        start++;
+  if (start + 1 < constraint.size() && constraint[start+1] == '=') {
+    op = constraint.substr(start, 2);
+    start += 2;
+  }
+  else {
+    op = constraint[start];
+    start++;
+  }
 
-    if (start + 1 < constraint.size() && constraint[start+1] == '=') {
-        op = constraint.substr(start, 2);
-        start += 2;
+  while (start < constraint.size() && (constraint[start] == ' '))
+    start++;
+
+  size_t len = 0;
+  while (start+len < constraint.size() && constraint[start+len] != ' ')
+    len++;
+
+  return std::make_pair(constraint.substr(start, len), op);
+}
+
+
+llvm::APFloat Witness::Waypoint::get_float_initializer(std::string val, const llvm::Type& type) {
+
+  if (type.isFloatTy()) {
+    size_t end;
+    float f_value = std::stof(val, &end);
+    if (end == val.size()) {
+      llvm::APFloat ap_fvalue(f_value);
+      return ap_fvalue;
     }
-    else {
-        op = constraint[start];
-        start++;
+  }
+
+  if (type.isDoubleTy()) {
+    size_t end;
+    float d_value = std::stod(val, &end);
+    if (end == val.size()) {
+      llvm::APFloat ap_fvalue(d_value);
+      return ap_fvalue;
     }
+  }
 
-    while (start < constraint.size() && (constraint[start] == ' ' ||
-                                         constraint[start] == '('))
-        start++;
+  klee::klee_error("Failed parsing constraint");
+}
 
-    size_t len = 0;
-    while (start+len < constraint.size() && constraint[start+len] != ';'
-           && constraint[start+len] != ' ' && constraint[start+len] != ')')
-        len++;
 
-    std::string result = constraint.substr(start, len);
-    klee::Expr::Width width = (*left.get()).getWidth();  
+klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::Expr> left, const llvm::Type& type){
+    auto parsed = parse_constraint();
+    std::string result = parsed.first;
+    std::string op = parsed.second;
 
-    int64_t s_value = 0;
-    uint64_t u_value = 0;
-    bool is_signed = false;
+    klee::Expr::Width width = (*left.get()).getWidth();
+    klee::ref<klee::Expr> right;
+    bool is_signed = true;
 
-    if (isdigit(result[0]) || result[0] == '-') {
+    if (type.isFloatingPointTy()) {
+      right = klee::ref<klee::Expr>(
+          klee::ConstantExpr::alloc(this->get_float_initializer(result, type)));
+    } else {
+
+      int64_t s_value = 0;
+      uint64_t u_value = 0;
+      is_signed = false;
+
+      if (width == 8 && result.size() == 3
+          && result[0] == '\'' && result[2] == '\'') {
+        u_value = (uint8_t) result[1];
+      } else {
         size_t end;
         if(result[0] == '-') {
-            is_signed = true;
-            s_value = std::stoll(result, &end, 0);
+          is_signed = true;
+          s_value = std::stoll(result, &end, 0);
         } else
-            u_value = std::stoull(result, &end, 0);
+          u_value = std::stoull(result, &end, 0);
 
         if (end != result.size())
-            klee::klee_error("Cant parse return constraint");
+          klee::klee_error("Cant parse return constraint");
+      }
 
-    } else {
-        klee::klee_error("Cant parse return constraint");
-    }
-
-
-    klee::ref<klee::Expr> right = klee::ref<klee::Expr>(
+      right = klee::ref<klee::Expr>(
                 klee::ConstantExpr::alloc(llvm::APInt(width,
                                                       is_signed ? s_value : u_value,
                                                       is_signed)));
+
+    }
 
     if (op == "==")
         return (klee::EqExpr::alloc(left, right));
