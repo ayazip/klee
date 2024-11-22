@@ -338,21 +338,29 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
 
       int64_t s_value = 0;
       uint64_t u_value = 0;
-      is_signed = false;
 
+      // ascii char
       if (width == 8 && result.size() == 3
           && result[0] == '\'' && result[2] == '\'') {
-        u_value = (uint8_t) result[1];
+        s_value = (int8_t) result[1];
       } else {
-        size_t end;
-        if(result[0] == '-') {
-          is_signed = true;
-          s_value = std::stoll(result, &end, 0);
-        } else
-          u_value = std::stoull(result, &end, 0);
+        // assume the value is signed, only try unsigned if strtoll fails
+        // use strtoll to avoid exceptions
+        const char * c_result = result.c_str();
+        char * p_end;
+        errno = 0;
+        s_value = std::strtoll(c_result, &p_end, 0);
 
-        if (end != result.size())
-          klee::klee_error("Cant parse return constraint");
+        if (errno == ERANGE || *p_end != 0) {
+          errno = 0;
+          // try unsigned
+          is_signed = false;
+          size_t end;
+          u_value = std::stoull(result, &end, 0);
+          if (end != result.size())
+            klee::klee_error("Cant parse return constraint");;
+        }
+
       }
 
       right = klee::ref<klee::Expr>(
