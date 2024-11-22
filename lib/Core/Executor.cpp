@@ -1420,6 +1420,8 @@ void Executor::stepWitness(ExecutionState &state, KInstruction *ki){
           }
         }
 
+    } else {
+        state.witnessNodeNext.insert(state.witnessNode.begin(), state.witnessNode.end());
     }
 
     if (replay && !state.replayEdges.empty()) {
