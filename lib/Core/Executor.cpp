@@ -1832,8 +1832,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     state.lastLoopFail = ki->inst;
     // fall-through
   } else if (isErrorCall(f->getName())) {
-    if ((*state.segment).follow.type == Witness::Type::Target
-              &&(*state.segment).follow.match_target(state.getErrorLocation())) {
+    auto currentSegment = state.getSegment();
+    if (currentSegment.follow.type == Witness::Type::Target
+              && currentSegment.follow.match_target(state.getErrorLocation())) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
     }
@@ -1846,6 +1847,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
   if (f->getName().equals("__INSTR_check_nontermination_header")) {
     state.lastLoopHead = ki->inst;
     state.lastLoopHeadId = state.nondetValues.size();
+    state.loopheadSegment.first = state.segment;
+    state.loopheadSegment.second = false;
+
     return;
   }
 
@@ -2711,12 +2715,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         }
       }
 
-      Witness::Segment current =  *state.segment;
+      Witness::Segment current =  state.getSegment();
       if (!current.check_avoid(*ki).empty())
           terminateState(state);
-      if (state.segment != witness.segments.end()
+      if (state.segment != witness.segments.size() - 1
               && current.follow.match(*ki))
-          state.next_segment();
+          state.nextSegment();
 
 
       executeCall(state, ki, f, arguments);
@@ -4266,8 +4270,9 @@ void Executor::terminateStateOnError(ExecutionState &state,
       haltExecution = true;
   }
 
-  if ((*state.segment).follow.type == Witness::Type::Target
-          &&(*state.segment).follow.match_target(state.getErrorLocation())) {
+  auto currentSegment = state.getSegment();
+  if ((currentSegment).follow.type == Witness::Type::Target
+          &&(currentSegment).follow.match_target(state.getErrorLocation())) {
 
     switch (terminationType) {
     case StateTerminationType::Free:
@@ -4324,8 +4329,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
         reportError(message, state, info, suffix, terminationType);
       }
 
-      if ((*state.segment).follow.type == Witness::Type::Target
-          &&(*state.segment).follow.match(*state.pc)) {
+      if (currentSegment.follow.type == Witness::Type::Target
+          && currentSegment.follow.match(*state.pc)) {
         if (witness.of_property(Witness::Property::valid_memcleanup)) {
           klee_message("Valid violation witness: valid-memcleanup");
           haltExecution=true;
@@ -5463,7 +5468,8 @@ void Executor::runFunctionAsMain(Function *f,
 
   initializeGlobals(*state, isEntryFunctionMain);
 
-  state->setSegment(witness.segments.begin());
+  state->segment = 0;
+  state->witness = &witness;
 
   processTree = std::make_unique<PTree>(state);
   run(*state);
@@ -6063,7 +6069,7 @@ void Executor::setReplayNondet(const struct KTest *out) {
 void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
                                  KInstruction& ki, unsigned type, const Type& return_type) {
 
-    Witness::Segment current =  *state.segment;
+    Witness::Segment current = state.getSegment();
 
     for (auto index : current.check_avoid(ki, type)){
       Witness::Waypoint avoid = current.avoid[index];
@@ -6080,7 +6086,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
 
     }
 
-    if (state.segment != witness.segments.end()
+    if (state.segment != witness.segments.size()
             && current.follow.match(ki, type)) {
 
          ref<Expr> constraint = current.follow.get_return_constraint(left, return_type);
@@ -6092,7 +6098,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
 
         if (feasible) {
           state.addConstraint(constraint);
-          state.next_segment();
+          state.nextSegment();
         } else {
             klee::klee_warning("Constraint not feasible");
             terminateState(state);

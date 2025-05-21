@@ -169,6 +169,8 @@ namespace klee {
     HANDLER(handleValAssume);
     HANDLER(handleValSegment);
     HANDLER(handleValBranch);
+    HANDLER(handleValInfiniteLoop);
+    HANDLER(handleValNonterminationCheck);
     HANDLER(handleValSwitch);
     HANDLER(handleVerifierNondetInt);
     HANDLER(handleVerifierNondetUInt);

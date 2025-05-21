@@ -157,7 +157,8 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__VALIDATOR_segment", handleValSegment, true),
   add("__VALIDATOR_branch", handleValBranch, true),
   add("__VALIDATOR_switch", handleValSwitch, true),
-
+  add("__INSTR_check_nontermination", handleValNonterminationCheck, false),
+  add("__INSTR_infinite_loop", handleValInfiniteLoop, false),
 
 
 
@@ -641,7 +642,7 @@ void SpecialFunctionHandler::handleValAssume(ExecutionState &state,
   } else {
     executor.addConstraint(state, e);
     if (follow->getAPValue() == 1)
-        state.next_segment();
+        state.nextSegment();
   }
 }
 
@@ -652,12 +653,12 @@ void SpecialFunctionHandler::handleValSegment(ExecutionState &state,
   assert(arguments.size()==1 && "invalid number of arguments to validator_segment");
   ConstantExpr *s = cast<ConstantExpr>(arguments[0].value);
 
-  if (s->getZExtValue() == state.segment_number)
+  if (s->getZExtValue() == state.segment)
     state.witAssume = true;
 
   executor.bindLocal(target, state,
                      KValue(ConstantExpr::create(
-                                s->getAPValue() == state.segment_number, 32)));
+                                s->getAPValue() == state.segment, 32)));
 }
 
 void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
@@ -674,7 +675,8 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
 
   ref<Expr> cond = NotExpr::create(arguments[2].createIsZero());
 
-  std::pair<bool,bool> explore = state.segment->get_condition_constraint(line, col);
+  std::pair<bool,bool> explore
+      = state.getSegment().get_condition_constraint(line, col);
   if (!explore.first && !explore.second) {
       executor.haltExecution = true;
       executor.terminateState(state);
@@ -695,8 +697,8 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
         executor.terminateState(state);
         return;
       }
-    if (state.segment->follow.loc.match(line, col))
-      state.next_segment();
+    if (state.getSegment().follow.loc.match(line, col))
+      state.nextSegment();
     executor.bindLocal(target, state, arguments[2]);
     return;
   }
@@ -725,8 +727,8 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
       }
   }
 
-  if (state.segment->follow.loc.match(line, col))
-      state.next_segment();
+  if (state.getSegment().follow.loc.match(line, col))
+      state.nextSegment();
   executor.bindLocal(target, state, arguments[2]);
 }
 
@@ -742,7 +744,7 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
     uint64_t line = l->getZExtValue();
     uint64_t col  = c->getZExtValue();
 
-    for (auto avoid : state.segment->avoid) {
+    for (auto avoid : state.getSegment().avoid) {
         if (line != avoid.loc.line || col != avoid.loc.column)
             continue;
 
@@ -767,7 +769,7 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
         executor.addConstraint(state, NotExpr::create(cond));
     }
 
-    auto follow = state.segment->follow;
+    auto follow = state.getSegment().follow;
     if (line == follow.loc.line && col == follow.loc.column) {
         if (follow.constraint == "default"){
             if (state.avoidDef){
@@ -792,12 +794,52 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
             }
             executor.addConstraint(state, cond);
         }
-        state.next_segment();
+        state.nextSegment();
     }
     executor.bindLocal(target, state, arguments[2]);
 
 }
 
+void SpecialFunctionHandler::handleValNonterminationCheck (ExecutionState &state,
+                                             KInstruction *target,
+                                             const std::vector<Cell> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments");
+
+  ref<Expr> e = arguments[0].value;
+
+  if (e->getWidth() != Expr::Bool)
+    e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
+
+  bool res;
+  bool success __attribute__((unused)) = executor.solver->mustBeFalse(
+      state.constraints, e, res, state.queryMetaData);
+  assert(success && "FIXME: Unhandled solver failure");
+
+  if (res)
+    return;
+
+  if (state.segment == state.loopheadSegment.first
+      && state.loopheadSegment.second) {
+    klee_message("Valid violation witness: termination");
+    executor.terminateState(state);
+    executor.haltExecution = true;
+  }
+
+}
+
+void SpecialFunctionHandler::handleValInfiniteLoop (ExecutionState &state,
+                                                          KInstruction *target,
+                                                          const std::vector<Cell> &arguments) {
+  assert(arguments.size() == 0 && "invalid number of arguments");
+
+  if (state.segment == state.loopheadSegment.first
+      && state.loopheadSegment.second) {
+    klee_message("Valid violation witness: termination");
+    executor.terminateState(state);
+    executor.haltExecution = true;
+  }
+
+}
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,
                                 KInstruction *target,
                                 const std::vector<Cell> &arguments) {

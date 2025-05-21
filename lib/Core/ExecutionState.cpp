@@ -115,8 +115,10 @@ ExecutionState::ExecutionState(const ExecutionState& state):
                              : nullptr),
     coveredNew(state.coveredNew),
     forkDisabled(state.forkDisabled),
+    witness(state.witness),
     segment(state.segment),
-    segment_number(state.segment_number){
+    loopheadSegment(state.loopheadSegment)
+    {
   for (const auto &cur_mergehandler: openMergeStack)
     cur_mergehandler->addOpenState(this);
 }
@@ -422,3 +424,13 @@ std::tuple<std::string, unsigned, unsigned> ExecutionState::getErrorLocation() c
   klee::klee_warning("Can't get error location for witness");
   return {"", 0, 0};
 }
+
+void ExecutionState::nextSegment() {
+  if (segment < witness->segments.size() - 1) {
+    ++segment;
+  } else {
+    segment = witness->cycle_from;
+    loopheadSegment.second = true;
+  }
+}
+

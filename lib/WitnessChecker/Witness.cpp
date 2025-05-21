@@ -24,7 +24,7 @@ Witness::Type parse_type(YAML::Node yaml_waypoint){
         return Witness::Type::Enter;
     if (yaml_waypoint["type"].as<std::string>() == "target")
         return Witness::Type::Target;
-    klee::klee_error("Invalid waypoint type!");
+    klee::klee_error("Invalid waypoint type! %s", yaml_waypoint["type"].as<std::string>().c_str());
 
 }
 
@@ -65,6 +65,7 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
     std::vector<Segment> witness;
     assert(sequence.Type() == YAML::NodeType::Sequence);
+    size_t cycle_from = sequence.size();
 
     for (std::size_t i=0; i<sequence.size(); i++) {
         YAML::Node yaml_segment = sequence[i]["segment"];
@@ -93,15 +94,18 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
             YAML::Node constraint = yaml_waypoint["constraint"]["value"];
 
+            if (cycle_from > i && yaml_waypoint["action"].as<std::string>() == "cycle")
+              cycle_from = i;
+
             if (constraint.Type() != YAML::NodeType::Undefined)
                 waypoint.constraint = constraint.as<std::string>();
 
-            if (j == yaml_segment.size() - 1
-                || yaml_waypoint["action"].as<std::string>() == "follow") {
-                assert(j == yaml_segment.size() - 1);
-                assert(yaml_waypoint["action"].as<std::string>() == "follow");
-                segment.follow = waypoint;
-                break;
+            if (j == yaml_segment.size() - 1) {
+              if (yaml_waypoint["action"].as<std::string>() != "follow" &&
+                  !(cycle_from <= i || yaml_waypoint["action"].as<std::string>() == "cycle"))
+                klee::klee_error("Invalid waypoint action: %s", yaml_waypoint["action"].as<std::string>().c_str() );
+              segment.follow = waypoint;
+              break;
 
             }
 
@@ -114,6 +118,7 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
     ErrorWitness ew;
     ew.segments = witness;
+    ew.cycle_from = cycle_from;
 
     std::string specification = node[0]["metadata"]["task"]["specification"].as<std::string>();
     ew.property = get_property(specification);
@@ -196,6 +201,7 @@ bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
     case Witness::Type::Assume:
     case Witness::Type::Target:
+    case Witness::Type::Branch:
         return false;
 
     default:

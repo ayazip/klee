@@ -70,6 +70,7 @@ namespace Witness {
       std::vector<Segment> segments;
       std::set<Property> property;
       std::string error_function;
+      size_t cycle_from;
 
       bool of_property(Property p) {return property.find(p) != property.end(); }
   };

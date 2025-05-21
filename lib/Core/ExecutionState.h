@@ -319,11 +319,15 @@ public:
   /// @brief Disables forking for this state. Set by user code
   bool forkDisabled = false;
 
-  ///@brief Tracks the current segment in the witness
-  std::vector<Witness::Segment>::iterator segment;
+  ///@brief The witness to be validated
+  Witness::ErrorWitness *witness;
 
   ///@brief Tracks the current segment in the witness
-  uint64_t segment_number = 0;
+  uint64_t segment = 0;
+
+  ///@brief Tracks the segment corresponding to the loophead in the program
+  /// and whether the exploration has passed the witness end
+  std::pair<uint64_t, bool> loopheadSegment;
 
   ///@brief For witness tracking: in the nearest switch avoid the default branch
   bool avoidDef = false;
@@ -371,8 +375,9 @@ public:
                               const std::string& name);
 
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
-  void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
-  void next_segment() { segment = std::next(segment); segment_number++; }
+  //void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
+  void nextSegment();
+  Witness::Segment getSegment() { return witness->segments[segment]; };
 };
 
 struct ExecutionStateIDCompare {
