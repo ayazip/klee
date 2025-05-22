@@ -1847,9 +1847,15 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
   if (f->getName().equals("__INSTR_check_nontermination_header")) {
     state.lastLoopHead = ki->inst;
     state.lastLoopHeadId = state.nondetValues.size();
-    state.loopheadSegment.first = state.segment;
-    state.loopheadSegment.second = false;
+    return;
+  }
 
+  if (f->getName().equals("__INSTR_store")) {
+    // Block storing of current values after this one
+    if (state.loopheadSegment.first < state.witness->segments.size())
+        state.loopNoStore = true;
+    state.loopheadSegment.first = state.segment;
+    state.loopheadSegment.second = 0;
     return;
   }
 
@@ -5470,6 +5476,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   state->segment = 0;
   state->witness = &witness;
+  state->loopheadSegment.first = state->witness->segments.size();
 
   processTree = std::make_unique<PTree>(state);
   run(*state);

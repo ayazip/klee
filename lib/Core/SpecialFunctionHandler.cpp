@@ -159,6 +159,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("__VALIDATOR_switch", handleValSwitch, true),
   add("__INSTR_check_nontermination", handleValNonterminationCheck, false),
   add("__INSTR_infinite_loop", handleValInfiniteLoop, false),
+  add("__INSTR_nondet_store", handleValNondetStore, true),
 
 
 
@@ -815,8 +816,9 @@ void SpecialFunctionHandler::handleValNonterminationCheck (ExecutionState &state
       state.constraints, e, res, state.queryMetaData);
   assert(success && "FIXME: Unhandled solver failure");
 
-  if (res)
+  if (res){
     return;
+  }
 
   if (state.segment == state.loopheadSegment.first
       && state.loopheadSegment.second) {
@@ -832,6 +834,11 @@ void SpecialFunctionHandler::handleValInfiniteLoop (ExecutionState &state,
                                                           const std::vector<Cell> &arguments) {
   assert(arguments.size() == 0 && "invalid number of arguments");
 
+  if (state.loopheadSegment.first == state.witness->segments.size()) {
+    state.loopheadSegment.first = state.segment;
+    state.loopheadSegment.second = 0;
+    return;
+  }
   if (state.segment == state.loopheadSegment.first
       && state.loopheadSegment.second) {
     klee_message("Valid violation witness: termination");
@@ -840,6 +847,32 @@ void SpecialFunctionHandler::handleValInfiniteLoop (ExecutionState &state,
   }
 
 }
+
+void SpecialFunctionHandler::handleValNondetStore (ExecutionState &state,
+                                                   KInstruction *target,
+                                                   const std::vector<Cell> &arguments) {
+  assert(arguments.size() == 0 && "invalid number of arguments");
+
+  // This is the first loophead visit, we always store
+  if (state.loopheadSegment.first == state.witness->segments.size()) {
+    putConcreteValue(state, "nondet_store", false,
+                     target, ConstantExpr::alloc(1, Expr::Bool));
+    return;
+  }
+
+  if (state.loopNoStore) {
+    putConcreteValue(state, "nondet_store", false,
+                     target, ConstantExpr::alloc(1, Expr::Bool));
+    return;
+  }
+
+  executor.bindLocal(target, state,
+                       executor.createNondetValue(state, Expr::Bool,
+                                                false, target,
+                                                "nondet_store", false));
+
+}
+
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,
                                 KInstruction *target,
                                 const std::vector<Cell> &arguments) {

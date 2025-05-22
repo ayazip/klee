@@ -327,7 +327,10 @@ public:
 
   ///@brief Tracks the segment corresponding to the loophead in the program
   /// and whether the exploration has passed the witness end
-  std::pair<uint64_t, bool> loopheadSegment;
+  std::pair<uint64_t, uint64_t> loopheadSegment;
+
+  ///@brief Block storing current values in non-termination witness validation
+  bool loopNoStore = false;
 
   ///@brief For witness tracking: in the nearest switch avoid the default branch
   bool avoidDef = false;

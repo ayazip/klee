@@ -117,7 +117,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     forkDisabled(state.forkDisabled),
     witness(state.witness),
     segment(state.segment),
-    loopheadSegment(state.loopheadSegment)
+    loopheadSegment(state.loopheadSegment),
+    loopNoStore(state.loopNoStore)
     {
   for (const auto &cur_mergehandler: openMergeStack)
     cur_mergehandler->addOpenState(this);
@@ -430,7 +431,7 @@ void ExecutionState::nextSegment() {
     ++segment;
   } else {
     segment = witness->cycle_from;
-    loopheadSegment.second = true;
+    loopheadSegment.second++;
   }
 }
 
