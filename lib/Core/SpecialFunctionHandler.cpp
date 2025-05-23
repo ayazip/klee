@@ -853,14 +853,14 @@ void SpecialFunctionHandler::handleValNondetStore (ExecutionState &state,
                                                    const std::vector<Cell> &arguments) {
   assert(arguments.size() == 0 && "invalid number of arguments");
 
-  // This is the first loophead visit, we always store
-  if (state.loopheadSegment.first == state.witness->segments.size()) {
+  if (state.loopNoStore || state.segment < state.witness->cycle_from) {
     putConcreteValue(state, "nondet_store", false,
-                     target, ConstantExpr::alloc(1, Expr::Bool));
+                     target, ConstantExpr::alloc(0, Expr::Bool));
     return;
   }
 
-  if (state.loopNoStore) {
+  // This is the first loophead visit during the cycle, we always store
+  if (state.loopheadSegment.first == state.witness->segments.size()) {
     putConcreteValue(state, "nondet_store", false,
                      target, ConstantExpr::alloc(1, Expr::Bool));
     return;
