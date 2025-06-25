@@ -377,10 +377,11 @@ public:
   NondetValue& addNondetValue(const KValue &expr, bool isSigned,
                               const std::string& name);
 
-  std::tuple<std::string, unsigned, unsigned> getErrorLocation() const;
   //void setSegment(std::vector<Witness::Segment>::iterator it) { segment = it; }
   void nextSegment();
   Witness::Segment getSegment() { return witness->segments[segment]; };
+  std::tuple<std::string, unsigned, unsigned>
+    getErrorLocation(const std::string& filename) const;
 };
 
 struct ExecutionStateIDCompare {

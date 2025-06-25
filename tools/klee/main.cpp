@@ -121,6 +121,12 @@ namespace {
               cl::desc("Write out witness waypoints to be used in a YML violation witness (default=false)"),
               cl::cat(TestCaseCat));
 
+  cl::opt<std::string>
+  WaypointsFilename("waypoints-in-file",
+                     cl::init(""),
+                     cl::desc("Write only waypoints from the specified file (default=\"\")"),
+                     cl::cat(TestCaseCat));
+
   cl::opt<bool>
   WriteHarness("write-harness",
             cl::desc("Write .C file with definitions of nondeterministic functions (default=false)"),
@@ -1869,7 +1875,10 @@ int main(int argc, char **argv, char **envp) {
     kTest_free(ktest);
   }
 
+
   interpreter->setWitness(Witness::parse(WitnessFile.c_str()));
+  interpreter->setFileForWitness(WaypointsFilename);
+
 
   auto startTime = std::time(nullptr);
   { // output clock info and start time

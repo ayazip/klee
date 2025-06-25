@@ -636,11 +636,17 @@ public:
   void checkWidthMatch(KValue &left, KValue &right) const;
   void handleICMPForLazyMO(ExecutionState &state, KValue &value);
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() override { return errorLoc; }
+
   void setWitness(Witness::ErrorWitness w) override { witness = w; };
   void insertConstraint(ref<Expr> left, ExecutionState& state,
                          KInstruction& ki, unsigned type, const llvm::Type& return_type);
+
+  std::string fileForWitness = "";
+  void setFileForWitness(const std::string filename) override { fileForWitness = filename; }
+
+
 };
-  
+
 } // End klee namespace
 
 #endif /* KLEE_EXECUTOR_H */

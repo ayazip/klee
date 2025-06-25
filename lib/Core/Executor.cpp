@@ -1841,7 +1841,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
   } else if (isErrorCall(f->getName())) {
     auto currentSegment = state.getSegment();
     if (currentSegment.follow.type == Witness::Type::Target
-              && currentSegment.follow.matchTarget(state.getErrorLocation())) {
+              && currentSegment.follow.matchTarget(
+                state.getErrorLocation(fileForWitness))) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
         max_segment =  witness.segments.size();
@@ -1849,7 +1850,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     if (GuideOnly) {
         klee_message("Error found when using the witness as a guide: unreach-call");
         haltExecution=true;
-        errorLoc = state.getErrorLocation();
+        errorLoc = state.getErrorLocation(fileForWitness);
         max_segment = witness.segments.size();
     }
     terminateStateOnError(state,
@@ -4300,7 +4301,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   std::string error = witness.matchError(terminationType);
   bool matched_target = ((currentSegment).follow.type == Witness::Type::Target
-      &&(currentSegment).follow.matchTarget(state.getErrorLocation()));
+      &&(currentSegment).follow.matchTarget(state.getErrorLocation(fileForWitness)));
 
   if (!error.empty()) {
       if (matched_target) {
@@ -4311,7 +4312,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
       if (GuideOnly) {
           klee_message("Error found when using the witness as a guide: %s", error.c_str());
           haltExecution = true;
-          errorLoc = state.getErrorLocation();
+          errorLoc = state.getErrorLocation(fileForWitness);
           max_segment = witness.segments.size();
       }
   }
@@ -4352,7 +4353,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   if (shouldExitOn(terminationType)) {
     haltExecution = true;
-    errorLoc = state.getErrorLocation();
+    errorLoc = state.getErrorLocation(fileForWitness);
   }
 
   bool notemitted = emittedErrors.insert(std::make_pair(lastInst, message)).second;

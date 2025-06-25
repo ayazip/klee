@@ -180,6 +180,8 @@ public:
 
   virtual void setWitness(Witness::ErrorWitness w) = 0;
 
+  virtual void setFileForWitness(const std::string filename) = 0;
+
 };
 
 } // End klee namespace
