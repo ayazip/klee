@@ -1840,6 +1840,14 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     return;
   }
 
+  if (f->getName().equals("__symbiotic_nondet__Bool")) {
+      bindLocal(ki, state, createNondetValue(state, Expr::Bool,
+                                             false, ki,
+                                             "__symbiotic_nondet__Bool",
+                                             false));
+    return;
+  }
+
   if (f && f->isDeclaration()) {
     switch (f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
