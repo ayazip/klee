@@ -420,6 +420,13 @@ cl::opt<std::string> TimerInterval(
     cl::init("1s"),
     cl::cat(TerminationCat));
 
+cl::opt<bool> GuideOnly("guide-only",
+             cl::desc("End when an error is discovered and confirm the witness, regardless"
+                      "whether it matches the witness."),
+             cl::init(false),
+             cl::cat(TerminationCat));
+
+
 
 /*** Debugging options ***/
 
@@ -1833,8 +1840,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // fall-through
   } else if (isErrorCall(f->getName())) {
     auto currentSegment = state.getSegment();
-    if (currentSegment.follow.type == Witness::Type::Target
-              && currentSegment.follow.match_target(state.getErrorLocation())) {
+    if (GuideOnly || (currentSegment.follow.type == Witness::Type::Target
+              && currentSegment.follow.match_target(state.getErrorLocation()))) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
     }
@@ -4277,8 +4284,9 @@ void Executor::terminateStateOnError(ExecutionState &state,
   }
 
   auto currentSegment = state.getSegment();
-  if ((currentSegment).follow.type == Witness::Type::Target
-          &&(currentSegment).follow.match_target(state.getErrorLocation())) {
+  if (GuideOnly ||
+      ((currentSegment).follow.type == Witness::Type::Target
+       &&(currentSegment).follow.match_target(state.getErrorLocation()))) {
 
     switch (terminationType) {
     case StateTerminationType::Free:
