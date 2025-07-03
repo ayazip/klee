@@ -1840,10 +1840,16 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // fall-through
   } else if (isErrorCall(f->getName())) {
     auto currentSegment = state.getSegment();
-    if (GuideOnly || (currentSegment.follow.type == Witness::Type::Target
-              && currentSegment.follow.match_target(state.getErrorLocation()))) {
+    if (currentSegment.follow.type == Witness::Type::Target
+              && currentSegment.follow.match_target(state.getErrorLocation())) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
+        max_segment++;
+    }
+    if (GuideOnly) {
+        klee_message("Error found when using the witness as a guide: unreach-call");
+        haltExecution=true;
+        max_segment = witness.segments.size();
     }
     terminateStateOnError(state,
                           "ASSERTION FAIL: " + ErrorFun + " called",
@@ -3949,6 +3955,10 @@ void Executor::terminateState(ExecutionState &state) {
   }
 
   interpreterHandler->incPathsExplored();
+  if (!witness.of_property(Witness::termination) &&
+          max_segment < state.segment) {
+      max_segment = state.segment;
+  }
 
   std::vector<ExecutionState *>::iterator it =
       std::find(addedStates.begin(), addedStates.end(), &state);
@@ -4284,43 +4294,22 @@ void Executor::terminateStateOnError(ExecutionState &state,
   }
 
   auto currentSegment = state.getSegment();
-  if (GuideOnly ||
-      ((currentSegment).follow.type == Witness::Type::Target
-       &&(currentSegment).follow.match_target(state.getErrorLocation()))) {
 
-    switch (terminationType) {
-    case StateTerminationType::Free:
-      if (witness.of_property(Witness::Property::valid_free)) {
-        klee_message("Valid violation witness: valid-free");
-        haltExecution=true;
+  std::string error = witness.match_error(terminationType);
+  bool matched_target = ((currentSegment).follow.type == Witness::Type::Target
+      &&(currentSegment).follow.match_target(state.getErrorLocation()));
+
+  if (!error.empty()) {
+      if (matched_target) {
+          klee_message("Valid violation witness: %s", error.c_str());
+          haltExecution = true;
+          max_segment++;
       }
-      break;
-    case StateTerminationType::Ptr:
-    case StateTerminationType::BadVectorAccess:
-      if (witness.of_property(Witness::Property::valid_deref)) {
-        klee_message("Valid violation witness: valid-deref");
-        haltExecution=true;
+      if (GuideOnly) {
+          klee_message("Error found when using the witness as a guide: %s", error.c_str());
+          haltExecution = true;
+          max_segment = witness.segments.size();
       }
-      break;
-    case StateTerminationType::Overflow:
-      if (witness.of_property(Witness::Property::no_overflow)) {
-        klee_message("Valid violation witness: no-overflow");
-        haltExecution=true;
-      }
-      break;
-    case StateTerminationType::Leak:
-      if (witness.of_property(Witness::Property::valid_memtrack)) {
-        klee_message("Valid violation witness: valid-memtrack");
-        haltExecution=true;
-      }
-      if (witness.of_property(Witness::Property::valid_memcleanup)) {
-        klee_message("Valid violation witness: valid-memcleanup");
-        haltExecution=true;
-      }
-      break;
-    default:
-      break;
-    }
   }
 
   std::string message = messaget.str();
@@ -5496,6 +5485,11 @@ void Executor::runFunctionAsMain(Function *f,
 
   globalObjects.clear();
   globalAddresses.clear();
+
+  if (max_segment < witness.segments.size() // Did not find the errror
+      && !witness.of_property(Witness::termination))
+      klee::klee_message("Follow waypoint of segment %lu cannot be passed. "
+                         "(Target segment: %lu)", max_segment, witness.segments.size() - 1);
 
   if (statsTracker)
     statsTracker->done();

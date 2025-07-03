@@ -1,12 +1,10 @@
 #ifndef WITNESS_H
 #define WITNESS_H
 
-#include "klee/Core/ConcreteValue.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Expr/Expr.h"
-#include "klee/Module/KValue.h"
+#include "klee/Core/TerminationTypes.h"
 
-#include "llvm/IR/Instruction.h"
 
 #include <vector>
 #include <string>
@@ -73,6 +71,7 @@ namespace Witness {
       size_t cycle_from;
 
       bool of_property(Property p) {return property.find(p) != property.end(); }
+      std::string match_error(StateTerminationType);
   };
 
   std::set<Property> get_property(const std::string& str);

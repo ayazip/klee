@@ -409,3 +409,35 @@ int Witness::Waypoint::get_switch_value(){
         klee::klee_error("Can't parse switch constraint value");
     return value;
 }
+
+std::string Witness::ErrorWitness::match_error(StateTerminationType tt){
+
+  switch (tt) {
+
+  case StateTerminationType::Free:
+  if (this->of_property(Witness::Property::valid_free))
+      return "valid-free";
+  break;
+
+  case StateTerminationType::Ptr:
+  case StateTerminationType::BadVectorAccess:
+    if(this->of_property(Witness::Property::valid_deref))
+      return "valid-deref";
+    break;
+  case StateTerminationType::Overflow:
+    if (this->of_property(Witness::Property::no_overflow))
+      return "no-overflow";
+    break;
+
+  case StateTerminationType::Leak:
+    if (this->of_property(Witness::Property::valid_memtrack))
+      return "valid-memtrack";
+
+    if (this->of_property(Witness::Property::valid_memcleanup))
+      return "valid-memcleanup";
+    break;
+  default:
+    return "";
+  }
+  return "";
+}
