@@ -6090,8 +6090,10 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
       assert(success && "FIXME: Unhandled solver failure");
       if (feasible)
         state.addConstraint(constraint);
-      else
-         terminateState(state);
+      else {
+        terminateState(state);
+        return;
+      }
 
     }
 
