@@ -694,7 +694,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
   if (cond->getKind() == Expr::Constant) {
     if ((explore.first && !explore.second && cond->isFalse()) ||
           (!explore.first && explore.second && cond->isTrue())) {
-        klee_warning("Infeasible path, killing state");
+        klee_warning("Infeasible path, killing state (segment: %lu)", state.segment);
         executor.terminateState(state);
         return;
       }
@@ -712,7 +712,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
       if (result)
         executor.addConstraint(state, cond);
       else {
-        klee_warning("Infeasible path, killing state");
+        klee_warning("Infeasible path, killing state (segment: %lu)", state.segment);
         executor.terminateState(state);
       }
   }
@@ -723,7 +723,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
       if (!result)
         executor.addConstraint(state, Expr::createIsZero(cond));
       else {
-        klee_warning("Infeasible path, killing state");
+        klee_warning("Infeasible path, killing state (segment: %lu)", state.segment);
         executor.terminateState(state);
       }
   }

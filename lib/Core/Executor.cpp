@@ -1844,11 +1844,12 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
               && currentSegment.follow.match_target(state.getErrorLocation())) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
-        max_segment++;
+        max_segment =  witness.segments.size();
     }
     if (GuideOnly) {
         klee_message("Error found when using the witness as a guide: unreach-call");
         haltExecution=true;
+        errorLoc = state.getErrorLocation();
         max_segment = witness.segments.size();
     }
     terminateStateOnError(state,
@@ -4308,6 +4309,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
       if (GuideOnly) {
           klee_message("Error found when using the witness as a guide: %s", error.c_str());
           haltExecution = true;
+          errorLoc = state.getErrorLocation();
           max_segment = witness.segments.size();
       }
   }
