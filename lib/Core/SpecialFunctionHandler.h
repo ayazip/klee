@@ -173,6 +173,7 @@ namespace klee {
     HANDLER(handleValNonterminationCheck);
     HANDLER(handleValSwitch);
     HANDLER(handleValNondetStore);
+    HANDLER(handleSymbioticNondet_Bool);
     HANDLER(handleVerifierNondetInt);
     HANDLER(handleVerifierNondetUInt);
     HANDLER(handleVerifierNondetUInt128);
