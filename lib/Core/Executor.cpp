@@ -4205,12 +4205,13 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
       terminateState(state);
     }
   } else {
-    if (ExitOnErrorType.empty() &&
-        (shouldWriteTest(state) ||
-         (AlwaysOutputSeeds && seedMap.count(&state))))
-      interpreterHandler->processTestCase(
-          state, nullptr,
-          terminationTypeFileExtension(StateTerminationType::Exit).c_str());
+     // Do not produce these when witness-checking
+     // if (ExitOnErrorType.empty() &&
+     //    (shouldWriteTest(state) ||
+     //     (AlwaysOutputSeeds && seedMap.count(&state))))
+     //  interpreterHandler->processTestCase(
+     //      state, nullptr,
+     //      terminationTypeFileExtension(StateTerminationType::Exit).c_str());
 
     interpreterHandler->incPathsCompleted();
     terminateState(state);
