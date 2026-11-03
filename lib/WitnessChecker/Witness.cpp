@@ -212,7 +212,7 @@ bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 }
 
 bool Witness::Waypoint::matchTarget(std::tuple<std::string, unsigned, unsigned> errorLoc){
-    if (type != Witness::Type::Target) // || std::get<0>(error_loc) != loc.filename)
+    if (type != Witness::Type::Target) // || std::get<0>(errorLoc) != loc.filename)
         return false;
 
     if (loc2.column == 0)
@@ -233,33 +233,33 @@ bool Witness::Waypoint::matchTarget(std::tuple<std::string, unsigned, unsigned> 
 
 std::pair<bool, bool> Witness::Segment::getConditionConstraint(uint64_t line, uint64_t col) {
 
-    bool go_true = true;
-    bool go_false = true;
+    bool goTrue = true;
+    bool goFalse = true;
 
     // go_x is set to false if the follow waypoint says to take the !x branch
     if (follow.type ==  Witness::Type::Branch && follow.loc.match(line, col)) {
         bool result = getValue(follow.constraint);
-        go_true = result;
-        go_false = !result;
+        goTrue = result;
+        goFalse = !result;
     }
 
-    bool avoid_true = !go_true;
-    bool avoid_false = !go_false;
+    bool avoidTrue = !goTrue;
+    bool avoidFalse = !goFalse;
 
     for (size_t i=0; i<avoid.size(); i++) {
         if (avoid[i].type == Witness::Type::Branch && avoid[i].loc.match(line, col)) {
 
-            bool avoid_value = getValue(avoid[i].constraint);
-            if ((!go_true && !avoid_value) || (!go_false && avoid_value)) {
+            bool avoidValue = getValue(avoid[i].constraint);
+            if ((!goTrue && !avoidValue) || (!goFalse && avoidValue)) {
                 klee::klee_warning("Conflicting branching info in segment");
                 return std::make_pair(false, false);
             }
-            avoid_true = avoid_true || avoid_value;
-            avoid_false = avoid_false || !avoid_value;
+            avoidTrue = avoidTrue || avoidValue;
+            avoidFalse = avoidFalse || !avoidValue;
         }
     }
 
-    return std::make_pair(!avoid_true, !avoid_false);
+    return std::make_pair(!avoidTrue, !avoidFalse);
 
 }
 
@@ -309,19 +309,19 @@ llvm::APFloat Witness::Waypoint::getFloatInitializer(std::string val, const llvm
 
   if (type.isFloatTy()) {
     size_t end;
-    float f_value = std::stof(val, &end);
+    float fValue = std::stof(val, &end);
     if (end == val.size()) {
-      llvm::APFloat ap_fvalue(f_value);
-      return ap_fvalue;
+      llvm::APFloat AP_fValue(fValue);
+      return AP_fValue;
     }
   }
 
   if (type.isDoubleTy()) {
     size_t end;
-    float d_value = std::stod(val, &end);
+    float dValue = std::stod(val, &end);
     if (end == val.size()) {
-      llvm::APFloat ap_fvalue(d_value);
-      return ap_fvalue;
+      llvm::APFloat AP_fValue(dValue);
+      return AP_fValue;
     }
   }
 
@@ -336,34 +336,34 @@ klee::ref<klee::Expr> Witness::Waypoint::getReturnConstraint(klee::ref<klee::Exp
 
     klee::Expr::Width width = (*left.get()).getWidth();
     klee::ref<klee::Expr> right;
-    bool is_signed = true;
+    bool isSigned = true;
 
     if (type.isFloatingPointTy()) {
       right = klee::ref<klee::Expr>(
           klee::ConstantExpr::alloc(this->getFloatInitializer(result, type)));
     } else {
 
-      int64_t s_value = 0;
-      uint64_t u_value = 0;
+      int64_t sValue = 0;
+      uint64_t uValue = 0;
 
       // ascii char
       if (width == 8 && result.size() == 3
           && result[0] == '\'' && result[2] == '\'') {
-        s_value = (int8_t) result[1];
+        sValue = (int8_t) result[1];
       } else {
         // assume the value is signed, only try unsigned if strtoll fails
         // use strtoll to avoid exceptions
         const char * c_result = result.c_str();
-        char * p_end;
+        char * pEnd;
         errno = 0;
-        s_value = std::strtoll(c_result, &p_end, 0);
+        sValue = std::strtoll(c_result, &pEnd, 0);
 
-        if (errno == ERANGE || *p_end != 0) {
+        if (errno == ERANGE || *pEnd != 0) {
           errno = 0;
           // try unsigned
-          is_signed = false;
+          isSigned = false;
           size_t end;
-          u_value = std::stoull(result, &end, 0);
+          uValue = std::stoull(result, &end, 0);
           if (end != result.size())
             klee::klee_error("Cant parse return constraint");;
         }
@@ -372,8 +372,8 @@ klee::ref<klee::Expr> Witness::Waypoint::getReturnConstraint(klee::ref<klee::Exp
 
       right = klee::ref<klee::Expr>(
                 klee::ConstantExpr::alloc(llvm::APInt(width,
-                                                      is_signed ? s_value : u_value,
-                                                      is_signed)));
+                                                      isSigned ? sValue : uValue,
+                                                      isSigned)));
 
     }
 
@@ -381,7 +381,7 @@ klee::ref<klee::Expr> Witness::Waypoint::getReturnConstraint(klee::ref<klee::Exp
         return (klee::EqExpr::alloc(left, right));
     if (op == "!=")
         return klee::NotExpr::alloc(klee::EqExpr::alloc(left, right));
-    if (is_signed) {
+    if (isSigned) {
         if (op == ">")
             return klee::SltExpr::alloc(right, left);
         if (op == ">=")
