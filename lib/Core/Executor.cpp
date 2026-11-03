@@ -2418,6 +2418,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         if (!caller->use_empty()) {
           terminateStateOnExecError(state, "return void when caller expected a result");
         }
+        insert_constraint(nullptr, state, *kcaller, i->getOpcode(), *(caller->getType()));
+
       }
     }
     break;
@@ -4549,6 +4551,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     if (retTy->isVoidTy()) {
         //klee_warning_once(target, "Skipping call of undefined function: %s",
         //                  function->getName().str().c_str());
+        insert_constraint(nullptr, state, *target, Instruction::Ret, *(function->getReturnType()));
         return;
     }
 
@@ -4576,6 +4579,9 @@ void Executor::callExternalFunction(ExecutionState &state,
     bindLocal(target, state, nv);
     klee_warning_once(target, "Assume that the undefined function %s is pure",
                       function->getName().str().c_str());
+
+    ref<Expr> left = getDestCell(state, target).value;
+    insert_constraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
 
     return;
   }
@@ -4792,6 +4798,13 @@ void Executor::callExternalFunction(ExecutionState &state,
       value = returnVal;
     }
     bindLocal(target, state, value);
+    ref<Expr> left = getDestCell(state, target).value;
+    insert_constraint(left, state, *target, Instruction::Ret,
+                      *(function->getReturnType()));
+
+  } else {
+    insert_constraint(nullptr, state, *target, Instruction::Ret,
+                      *(function->getReturnType()));
   }
 }
 
@@ -4949,6 +4962,11 @@ void Executor::resolveExact(ExecutionState &state,
   }
 
   if (unbound) {
+    if (name == "free") {
+        terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
+                              StateTerminationType::Free, getKValueInfo(*unbound, addressOptim));
+        return;
+    }
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           StateTerminationType::Ptr, getKValueInfo(*unbound, addressOptim));
   }
@@ -6084,7 +6102,19 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
 
     for (auto index : current.check_avoid(ki, type)){
       Witness::Waypoint avoid = current.avoid[index];
-      ref<Expr> constraint = klee::NotExpr::alloc(avoid.get_return_constraint(left, return_type));
+      if (avoid.constraint == "1"){
+        terminateState(state);
+        return;
+      }
+      if (avoid.constraint == "0"){
+        continue;
+      }
+      if (left.isNull())
+          klee_error("Unsupported function_return constraint: %s",
+                     current.follow.constraint.c_str());
+
+      ref<Expr> constraint = klee::NotExpr::alloc(
+                  avoid.get_return_constraint(left, return_type));
 
       bool feasible;
       bool success __attribute__((unused)) = solver->mayBeTrue(
@@ -6102,7 +6132,22 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
     if (state.segment != witness.segments.size()
             && current.follow.match(ki, type)) {
 
-         ref<Expr> constraint = current.follow.get_return_constraint(left, return_type);
+        if (current.follow.constraint == "1"){
+          state.nextSegment();
+          return;
+        }
+
+        if (current.follow.constraint == "0"){
+          terminateState(state);
+          return;
+        }
+
+        if (left.isNull())
+          klee_error("Unsupported function_return constraint: %s",
+                     current.follow.constraint.c_str());
+
+        ref<Expr> constraint =
+                current.follow.get_return_constraint(left, return_type);
 
         bool feasible;
         bool success __attribute__((unused)) = solver->mayBeTrue(

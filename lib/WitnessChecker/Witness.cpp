@@ -276,7 +276,8 @@ std::pair<std::string, std::string> Witness::Waypoint::parse_constraint(){
   size_t start = constraint.find("\\result");
 
   if (start == std::string::npos)
-    klee::klee_error("invalid constraint");
+    klee::klee_error("Unsupported constraint for function_return: %s",
+                     constraint.c_str());
 
   std::string op;
 
