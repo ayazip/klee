@@ -13,38 +13,38 @@
 
 
 
-Witness::Type parse_type(YAML::Node yaml_waypoint){
-    if (yaml_waypoint["type"].as<std::string>() == "assumption")
+Witness::Type parseType(YAML::Node yamlWaypoint){
+    if (yamlWaypoint["type"].as<std::string>() == "assumption")
         return Witness::Type::Assume;
-    if (yaml_waypoint["type"].as<std::string>() == "branching")
+    if (yamlWaypoint["type"].as<std::string>() == "branching")
         return Witness::Type::Branch;
-    if (yaml_waypoint["type"].as<std::string>() == "function_return")
+    if (yamlWaypoint["type"].as<std::string>() == "function_return")
         return Witness::Type::Return;
-    if (yaml_waypoint["type"].as<std::string>() == "function_enter")
+    if (yamlWaypoint["type"].as<std::string>() == "function_enter")
         return Witness::Type::Enter;
-    if (yaml_waypoint["type"].as<std::string>() == "target")
+    if (yamlWaypoint["type"].as<std::string>() == "target")
         return Witness::Type::Target;
-    klee::klee_error("Invalid waypoint type! %s", yaml_waypoint["type"].as<std::string>().c_str());
+    klee::klee_error("Invalid waypoint type! %s", yamlWaypoint["type"].as<std::string>().c_str());
 
 }
 
-Witness::Location parse_location(YAML::Node yaml_waypoint, std::string key = "location"){
+Witness::Location parseLocation(YAML::Node yamlWaypoint, std::string key = "location"){
 
     Witness::Location loc;
 
     if (key == "location")
-        loc.filename = yaml_waypoint[key]["file_name"].as<std::string>();
+        loc.filename = yamlWaypoint[key]["file_name"].as<std::string>();
 
-    if (yaml_waypoint[key]["line"].Type() == YAML::NodeType::Undefined)
+    if (yamlWaypoint[key]["line"].Type() == YAML::NodeType::Undefined)
         if (key == "location")
             klee::klee_error("Missing line number in location");
         else
             klee::klee_warning("Can't get target location, the result may not be accurate");
     else
-        loc.line = yaml_waypoint[key]["line"].as<uint>();
+        loc.line = yamlWaypoint[key]["line"].as<uint>();
 
-    if (yaml_waypoint[key]["column"].Type() != YAML::NodeType::Undefined)
-        loc.column = yaml_waypoint[key]["column"].as<uint>();
+    if (yamlWaypoint[key]["column"].Type() != YAML::NodeType::Undefined)
+        loc.column = yamlWaypoint[key]["column"].as<uint>();
 
     return loc;
 
@@ -65,45 +65,45 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
     std::vector<Segment> witness;
     assert(sequence.Type() == YAML::NodeType::Sequence);
-    size_t cycle_from = sequence.size();
+    size_t cycleFrom = sequence.size();
 
     for (std::size_t i=0; i<sequence.size(); i++) {
-        YAML::Node yaml_segment = sequence[i]["segment"];
-        assert(yaml_segment.Type() == YAML::NodeType::Sequence);
+        YAML::Node yamlSegment = sequence[i]["segment"];
+        assert(yamlSegment.Type() == YAML::NodeType::Sequence);
 
         Segment segment;
 
-        for (std::size_t j=0; j<yaml_segment.size(); j++) {
+        for (std::size_t j=0; j<yamlSegment.size(); j++) {
 
-            YAML::Node yaml_waypoint = yaml_segment[j]["waypoint"];
+            YAML::Node yamlWaypoint = yamlSegment[j]["waypoint"];
 
             Waypoint waypoint;
 
-            waypoint.loc = parse_location(yaml_waypoint);
-            waypoint.type = parse_type(yaml_waypoint);
+            waypoint.loc = parseLocation(yamlWaypoint);
+            waypoint.type = parseType(yamlWaypoint);
 
             if (waypoint.type == Witness::Type::Target){
                 assert(i == sequence.size() - 1);
-                assert(j == yaml_segment.size() - 1);
+                assert(j == yamlSegment.size() - 1);
 
-                waypoint.loc2 = parse_location(yaml_waypoint, "location2");
+                waypoint.loc2 = parseLocation(yamlWaypoint, "location2");
 
                 segment.follow = waypoint;
                 break;
             }
 
-            YAML::Node constraint = yaml_waypoint["constraint"]["value"];
+            YAML::Node constraint = yamlWaypoint["constraint"]["value"];
 
-            if (cycle_from > i && yaml_waypoint["action"].as<std::string>() == "cycle")
-              cycle_from = i;
+            if (cycleFrom > i && yamlWaypoint["action"].as<std::string>() == "cycle")
+              cycleFrom = i;
 
             if (constraint.Type() != YAML::NodeType::Undefined)
                 waypoint.constraint = constraint.as<std::string>();
 
-            if (j == yaml_segment.size() - 1) {
-              if (yaml_waypoint["action"].as<std::string>() != "follow" &&
-                  !(cycle_from <= i || yaml_waypoint["action"].as<std::string>() == "cycle"))
-                klee::klee_error("Invalid waypoint action: %s", yaml_waypoint["action"].as<std::string>().c_str() );
+            if (j == yamlSegment.size() - 1) {
+              if (yamlWaypoint["action"].as<std::string>() != "follow" &&
+                  !(cycleFrom <= i || yamlWaypoint["action"].as<std::string>() == "cycle"))
+                klee::klee_error("Invalid waypoint action: %s", yamlWaypoint["action"].as<std::string>().c_str() );
               segment.follow = waypoint;
               break;
 
@@ -118,17 +118,17 @@ Witness::ErrorWitness Witness::parse(const std::string& filename) {
 
     ErrorWitness ew;
     ew.segments = witness;
-    ew.cycle_from = cycle_from;
+    ew.cycleFrom = cycleFrom;
 
     std::string specification = node[0]["metadata"]["task"]["specification"].as<std::string>();
-    ew.property = get_property(specification);
+    ew.property = getProperty(specification);
 
-    if (ew.of_property(Property::unreach_call))
-        ew.error_function = get_error_function(specification);
+    if (ew.ofProperty(Property::unreach_call))
+        ew.errorFunction = getErrorFunction(specification);
     return ew;
 }
 
-std::set<size_t> Witness::Segment::check_avoid(const klee::KInstruction& ki, unsigned type){
+std::set<size_t> Witness::Segment::checkAvoid(const klee::KInstruction& ki, unsigned type){
     std::set<size_t> matched;
 
     for (size_t i=0; i<avoid.size(); i++) {
@@ -144,7 +144,7 @@ bool Witness::Location::match(uint64_t l, uint64_t c) {
 }
 
 
-std::set<Witness::Property> Witness::get_property(const std::string& str){
+std::set<Witness::Property> Witness::getProperty(const std::string& str){
     std::set<Witness::Property> prp;
     if (str.find("valid-free") != std::string::npos)
         prp.emplace(Witness::Property::valid_free);
@@ -163,7 +163,7 @@ std::set<Witness::Property> Witness::get_property(const std::string& str){
 
 }
 
-std::string Witness::get_error_function(const std::string& str){
+std::string Witness::getErrorFunction(const std::string& str){
     size_t pos;
     if ((pos = str.find("G ! call(")) != std::string::npos) {
         pos += 9;
@@ -211,34 +211,34 @@ bool Witness::Waypoint::match(const klee::KInstruction& ki, unsigned t) {
 
 }
 
-bool Witness::Waypoint::match_target(std::tuple<std::string, unsigned, unsigned> error_loc){
+bool Witness::Waypoint::matchTarget(std::tuple<std::string, unsigned, unsigned> errorLoc){
     if (type != Witness::Type::Target) // || std::get<0>(error_loc) != loc.filename)
         return false;
 
     if (loc2.column == 0)
-        return (std::get<1>(error_loc) == loc.line
-                && (!loc.column || std::get<2>(error_loc) == loc.column));
+        return (std::get<1>(errorLoc) == loc.line
+                && (!loc.column || std::get<2>(errorLoc) == loc.column));
 
-    if (loc.line == loc2.line && std::get<1>(error_loc) == loc.line)
-        return std::get<2>(error_loc) >= loc.column && std::get<2>(error_loc) <= loc2.column;
+    if (loc.line == loc2.line && std::get<1>(errorLoc) == loc.line)
+        return std::get<2>(errorLoc) >= loc.column && std::get<2>(errorLoc) <= loc2.column;
 
-    if (std::get<1>(error_loc) == loc.line)
-        return std::get<2>(error_loc) >= loc.column;
+    if (std::get<1>(errorLoc) == loc.line)
+        return std::get<2>(errorLoc) >= loc.column;
 
-    if (std::get<1>(error_loc) == loc2.line)
-        return std::get<2>(error_loc) <= loc.column;
+    if (std::get<1>(errorLoc) == loc2.line)
+        return std::get<2>(errorLoc) <= loc.column;
 
-    return std::get<1>(error_loc) > loc.line && std::get<1>(error_loc) < loc2.line;
+    return std::get<1>(errorLoc) > loc.line && std::get<1>(errorLoc) < loc2.line;
 }
 
-std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, uint64_t col) {
+std::pair<bool, bool> Witness::Segment::getConditionConstraint(uint64_t line, uint64_t col) {
 
     bool go_true = true;
     bool go_false = true;
 
     // go_x is set to false if the follow waypoint says to take the !x branch
     if (follow.type ==  Witness::Type::Branch && follow.loc.match(line, col)) {
-        bool result = get_value(follow.constraint);
+        bool result = getValue(follow.constraint);
         go_true = result;
         go_false = !result;
     }
@@ -249,7 +249,7 @@ std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, 
     for (size_t i=0; i<avoid.size(); i++) {
         if (avoid[i].type == Witness::Type::Branch && avoid[i].loc.match(line, col)) {
 
-            bool avoid_value = get_value(avoid[i].constraint);
+            bool avoid_value = getValue(avoid[i].constraint);
             if ((!go_true && !avoid_value) || (!go_false && avoid_value)) {
                 klee::klee_warning("Conflicting branching info in segment");
                 return std::make_pair(false, false);
@@ -263,7 +263,7 @@ std::pair<bool, bool> Witness::Segment::get_condition_constraint(uint64_t line, 
 
 }
 
-bool get_value(const std::string& constraint){
+bool getValue(const std::string& constraint){
     if (constraint == "true")
         return true;
     if (constraint == "false")
@@ -272,7 +272,7 @@ bool get_value(const std::string& constraint){
 
 }
 
-std::pair<std::string, std::string> Witness::Waypoint::parse_constraint(){
+std::pair<std::string, std::string> Witness::Waypoint::parseConstraint(){
   size_t start = constraint.find("\\result");
 
   if (start == std::string::npos)
@@ -305,7 +305,7 @@ std::pair<std::string, std::string> Witness::Waypoint::parse_constraint(){
 }
 
 
-llvm::APFloat Witness::Waypoint::get_float_initializer(std::string val, const llvm::Type& type) {
+llvm::APFloat Witness::Waypoint::getFloatInitializer(std::string val, const llvm::Type& type) {
 
   if (type.isFloatTy()) {
     size_t end;
@@ -329,8 +329,8 @@ llvm::APFloat Witness::Waypoint::get_float_initializer(std::string val, const ll
 }
 
 
-klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::Expr> left, const llvm::Type& type){
-    auto parsed = parse_constraint();
+klee::ref<klee::Expr> Witness::Waypoint::getReturnConstraint(klee::ref<klee::Expr> left, const llvm::Type& type){
+    auto parsed = parseConstraint();
     std::string result = parsed.first;
     std::string op = parsed.second;
 
@@ -340,7 +340,7 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
 
     if (type.isFloatingPointTy()) {
       right = klee::ref<klee::Expr>(
-          klee::ConstantExpr::alloc(this->get_float_initializer(result, type)));
+          klee::ConstantExpr::alloc(this->getFloatInitializer(result, type)));
     } else {
 
       int64_t s_value = 0;
@@ -403,7 +403,7 @@ klee::ref<klee::Expr> Witness::Waypoint::get_return_constraint(klee::ref<klee::E
     klee::klee_error("Invalid operand in return constraint");
 }
 
-int Witness::Waypoint::get_switch_value(){
+int Witness::Waypoint::getSwitchValue(){
     size_t idx = 0;
     int value = std::stoi(constraint, &idx, 0);
     if (idx != constraint.size())
@@ -411,30 +411,30 @@ int Witness::Waypoint::get_switch_value(){
     return value;
 }
 
-std::string Witness::ErrorWitness::match_error(StateTerminationType tt){
+std::string Witness::ErrorWitness::matchError(StateTerminationType tt){
 
   switch (tt) {
 
   case StateTerminationType::Free:
-  if (this->of_property(Witness::Property::valid_free))
+  if (this->ofProperty(Witness::Property::valid_free))
       return "valid-free";
   break;
 
   case StateTerminationType::Ptr:
   case StateTerminationType::BadVectorAccess:
-    if(this->of_property(Witness::Property::valid_deref))
+    if(this->ofProperty(Witness::Property::valid_deref))
       return "valid-deref";
     break;
   case StateTerminationType::Overflow:
-    if (this->of_property(Witness::Property::no_overflow))
+    if (this->ofProperty(Witness::Property::no_overflow))
       return "no-overflow";
     break;
 
   case StateTerminationType::Leak:
-    if (this->of_property(Witness::Property::valid_memtrack))
+    if (this->ofProperty(Witness::Property::valid_memtrack))
       return "valid-memtrack";
 
-    if (this->of_property(Witness::Property::valid_memcleanup))
+    if (this->ofProperty(Witness::Property::valid_memcleanup))
       return "valid-memcleanup";
     break;
   default:

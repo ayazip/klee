@@ -49,36 +49,36 @@ namespace Witness {
     std::string constraint = "true";
 
     bool match(const klee::KInstruction& ki,  unsigned type = 0);
-    bool match_target(std::tuple<std::string, unsigned, unsigned>);
-    klee::ref<klee::Expr> get_return_constraint(klee::ref<klee::Expr> left, const llvm::Type& type);
-    int get_switch_value();
-    std::pair<std::string, std::string> parse_constraint();
-    llvm::APFloat get_float_initializer(std::string, const llvm::Type&);
+    bool matchTarget(std::tuple<std::string, unsigned, unsigned>);
+    klee::ref<klee::Expr> getReturnConstraint(klee::ref<klee::Expr> left, const llvm::Type& type);
+    int getSwitchValue();
+    std::pair<std::string, std::string> parseConstraint();
+    llvm::APFloat getFloatInitializer(std::string, const llvm::Type&);
 
   };
 
   struct Segment {
     std::vector<Waypoint> avoid;
     Waypoint follow;
-    std::set<size_t> check_avoid(const klee::KInstruction& ki, unsigned type = 0);
-    std::pair<bool, bool> get_condition_constraint(uint64_t line, uint64_t col);
+    std::set<size_t> checkAvoid(const klee::KInstruction& ki, unsigned type = 0);
+    std::pair<bool, bool> getConditionConstraint(uint64_t line, uint64_t col);
   };
 
   struct ErrorWitness {
       std::vector<Segment> segments;
       std::set<Property> property;
-      std::string error_function;
-      size_t cycle_from;
+      std::string errorFunction;
+      size_t cycleFrom;
 
-      bool of_property(Property p) {return property.find(p) != property.end(); }
-      std::string match_error(StateTerminationType);
+      bool ofProperty(Property p) {return property.find(p) != property.end(); }
+      std::string matchError(StateTerminationType);
   };
 
-  std::set<Property> get_property(const std::string& str);
-  std::string get_error_function(const std::string& str);
+  std::set<Property> getProperty(const std::string& str);
+  std::string getErrorFunction(const std::string& str);
   ErrorWitness parse(const std::string& filename);
 
 }
-bool get_value(const std::string& constraint);
+bool getValue(const std::string& constraint);
 
 #endif // WITNESS_H

@@ -430,7 +430,7 @@ void ExecutionState::nextSegment() {
   if (segment < witness->segments.size() - 1) {
     ++segment;
   } else {
-    segment = witness->cycle_from;
+    segment = witness->cycleFrom;
     loopheadSegment.second++;
   }
 }

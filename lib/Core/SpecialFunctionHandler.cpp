@@ -680,7 +680,7 @@ void SpecialFunctionHandler::handleValBranch(ExecutionState &state,
   ref<Expr> cond = NotExpr::create(arguments[2].createIsZero());
 
   std::pair<bool,bool> explore
-      = state.getSegment().get_condition_constraint(line, col);
+      = state.getSegment().getConditionConstraint(line, col);
   if (!explore.first && !explore.second) {
       executor.haltExecution = true;
       executor.terminateState(state);
@@ -757,7 +757,7 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
             continue;
         }
 
-        int value = avoid.get_switch_value();
+        int value = avoid.getSwitchValue();
         auto cond = EqExpr::create(arguments[2].value,
                     klee::ConstantExpr::alloc(llvm::APInt(arguments[2].getWidth(),
                                               value, true)));
@@ -784,7 +784,7 @@ void SpecialFunctionHandler::handleValSwitch(ExecutionState &state,
             }
             state.followDef = true;
         } else {
-            int value = follow.get_switch_value();
+            int value = follow.getSwitchValue();
             auto cond = EqExpr::create(arguments[2].value,
                         klee::ConstantExpr::alloc(llvm::APInt(arguments[2].getWidth(),
                                                   value, true)));
@@ -856,7 +856,7 @@ void SpecialFunctionHandler::handleValNondetStore (ExecutionState &state,
                                                    const std::vector<Cell> &arguments) {
   assert(arguments.size() == 0 && "invalid number of arguments");
 
-  if (state.loopNoStore || state.segment < state.witness->cycle_from) {
+  if (state.loopNoStore || state.segment < state.witness->cycleFrom) {
     putConcreteValue(state, "nondet_store", false,
                      target, ConstantExpr::alloc(0, Expr::Bool));
     return;

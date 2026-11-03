@@ -637,7 +637,7 @@ public:
   void handleICMPForLazyMO(ExecutionState &state, KValue &value);
   std::tuple<std::string, unsigned, unsigned> getErrorLocation() override { return errorLoc; }
   void setWitness(Witness::ErrorWitness w) override { witness = w; };
-  void insert_constraint(ref<Expr> left, ExecutionState& state,
+  void insertConstraint(ref<Expr> left, ExecutionState& state,
                          KInstruction& ki, unsigned type, const llvm::Type& return_type);
 };
   

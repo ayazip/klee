@@ -1841,7 +1841,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
   } else if (isErrorCall(f->getName())) {
     auto currentSegment = state.getSegment();
     if (currentSegment.follow.type == Witness::Type::Target
-              && currentSegment.follow.match_target(state.getErrorLocation())) {
+              && currentSegment.follow.matchTarget(state.getErrorLocation())) {
         klee_message("Valid violation witness: unreach-call");
         haltExecution=true;
         max_segment =  witness.segments.size();
@@ -2407,7 +2407,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             }
           }
 
-          insert_constraint(result.value, state, *kcaller, i->getOpcode(), *t);
+          insertConstraint(result.value, state, *kcaller, i->getOpcode(), *t);
 
           bindLocal(kcaller, state, result);
         }
@@ -2418,7 +2418,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         if (!caller->use_empty()) {
           terminateStateOnExecError(state, "return void when caller expected a result");
         }
-        insert_constraint(nullptr, state, *kcaller, i->getOpcode(), *(caller->getType()));
+        insertConstraint(nullptr, state, *kcaller, i->getOpcode(), *(caller->getType()));
 
       }
     }
@@ -2738,7 +2738,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       }
 
       Witness::Segment current =  state.getSegment();
-      if (!current.check_avoid(*ki).empty())
+      if (!current.checkAvoid(*ki).empty())
           terminateState(state);
       if (state.segment != witness.segments.size() - 1
               && current.follow.match(*ki))
@@ -3879,8 +3879,8 @@ void Executor::run(ExecutionState &initialState) {
   std::vector<ExecutionState *> newStates(states.begin(), states.end());
   searcher->update(0, newStates, std::vector<ExecutionState *>());
 
-  if (witness.of_property(Witness::Property::unreach_call))
-      ErrorFun = witness.error_function;
+  if (witness.ofProperty(Witness::Property::unreach_call))
+      ErrorFun = witness.errorFunction;
 
   // main interpreter loop
   while (!states.empty() && !haltExecution) {
@@ -3958,7 +3958,7 @@ void Executor::terminateState(ExecutionState &state) {
   }
 
   interpreterHandler->incPathsExplored();
-  if (!witness.of_property(Witness::termination) &&
+  if (!witness.ofProperty(Witness::termination) &&
           max_segment < state.segment) {
       max_segment = state.segment;
   }
@@ -4298,9 +4298,9 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   auto currentSegment = state.getSegment();
 
-  std::string error = witness.match_error(terminationType);
+  std::string error = witness.matchError(terminationType);
   bool matched_target = ((currentSegment).follow.type == Witness::Type::Target
-      &&(currentSegment).follow.match_target(state.getErrorLocation()));
+      &&(currentSegment).follow.matchTarget(state.getErrorLocation()));
 
   if (!error.empty()) {
       if (matched_target) {
@@ -4338,7 +4338,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
       if (currentSegment.follow.type == Witness::Type::Target
           && currentSegment.follow.match(*state.pc)) {
-        if (witness.of_property(Witness::Property::valid_memcleanup)) {
+        if (witness.ofProperty(Witness::Property::valid_memcleanup)) {
           klee_message("Valid violation witness: valid-memcleanup");
           haltExecution=true;
         }
@@ -4524,7 +4524,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (specialFunctionHandler->handle(state, function, target, arguments)) {
       if (function->getName().startswith("__VERIFIER_nondet")) {
           ref<Expr> left = getDestCell(state, target).value;
-          insert_constraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
+          insertConstraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
       }
 
     return;
@@ -4551,7 +4551,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     if (retTy->isVoidTy()) {
         //klee_warning_once(target, "Skipping call of undefined function: %s",
         //                  function->getName().str().c_str());
-        insert_constraint(nullptr, state, *target, Instruction::Ret, *(function->getReturnType()));
+        insertConstraint(nullptr, state, *target, Instruction::Ret, *(function->getReturnType()));
         return;
     }
 
@@ -4581,7 +4581,7 @@ void Executor::callExternalFunction(ExecutionState &state,
                       function->getName().str().c_str());
 
     ref<Expr> left = getDestCell(state, target).value;
-    insert_constraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
+    insertConstraint(left, state, *target, Instruction::Ret, *(function->getReturnType()));
 
     return;
   }
@@ -4799,11 +4799,11 @@ void Executor::callExternalFunction(ExecutionState &state,
     }
     bindLocal(target, state, value);
     ref<Expr> left = getDestCell(state, target).value;
-    insert_constraint(left, state, *target, Instruction::Ret,
+    insertConstraint(left, state, *target, Instruction::Ret,
                       *(function->getReturnType()));
 
   } else {
-    insert_constraint(nullptr, state, *target, Instruction::Ret,
+    insertConstraint(nullptr, state, *target, Instruction::Ret,
                       *(function->getReturnType()));
   }
 }
@@ -5507,7 +5507,7 @@ void Executor::runFunctionAsMain(Function *f,
   globalAddresses.clear();
 
   if (max_segment < witness.segments.size() // Did not find the errror
-      && !witness.of_property(Witness::termination))
+      && !witness.ofProperty(Witness::termination))
       klee::klee_message("Follow waypoint of segment %lu cannot be passed. "
                          "(Target segment: %lu)", max_segment, witness.segments.size() - 1);
 
@@ -6095,12 +6095,12 @@ void Executor::setReplayNondet(const struct KTest *out) {
 }
 
 
-void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
-                                 KInstruction& ki, unsigned type, const Type& return_type) {
+void Executor::insertConstraint(ref<Expr> left, ExecutionState& state,
+                                 KInstruction& ki, unsigned type, const Type& returnType) {
 
     Witness::Segment current = state.getSegment();
 
-    for (auto index : current.check_avoid(ki, type)){
+    for (auto index : current.checkAvoid(ki, type)){
       Witness::Waypoint avoid = current.avoid[index];
       if (avoid.constraint == "1"){
         terminateState(state);
@@ -6114,7 +6114,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
                      current.follow.constraint.c_str());
 
       ref<Expr> constraint = klee::NotExpr::alloc(
-                  avoid.get_return_constraint(left, return_type));
+                  avoid.getReturnConstraint(left, returnType));
 
       bool feasible;
       bool success __attribute__((unused)) = solver->mayBeTrue(
@@ -6147,7 +6147,7 @@ void Executor::insert_constraint(ref<Expr> left, ExecutionState& state,
                      current.follow.constraint.c_str());
 
         ref<Expr> constraint =
-                current.follow.get_return_constraint(left, return_type);
+                current.follow.getReturnConstraint(left, returnType);
 
         bool feasible;
         bool success __attribute__((unused)) = solver->mayBeTrue(
