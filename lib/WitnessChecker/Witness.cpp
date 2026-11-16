@@ -158,6 +158,8 @@ std::set<Witness::Property> Witness::getProperty(const std::string& str){
         prp.emplace(Witness::Property::no_overflow);
     if (str.find("G ! call(") != std::string::npos)
         prp.emplace(Property::unreach_call);
+    if (str.find("F end") != std::string::npos)
+      prp.emplace(Property::termination);
 
     if (prp.empty())
       klee::klee_error("Missing property!");
