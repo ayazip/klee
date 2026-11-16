@@ -150,15 +150,17 @@ std::set<Witness::Property> Witness::getProperty(const std::string& str){
         prp.emplace(Witness::Property::valid_free);
     if (str.find("valid-deref") != std::string::npos)
         prp.emplace(Witness::Property::valid_deref);
-    if (str.find("valid-memtrack") != std::string::npos)
-        prp.emplace(Witness::Property::valid_memtrack);
-    if (str.find("valid-memcleanup") != std::string::npos)
-        prp.emplace(Witness::Property::valid_memcleanup);
+    // if (str.find("valid-memtrack") != std::string::npos)
+    //    prp.emplace(Witness::Property::valid_memtrack);
+    // if (str.find("valid-memcleanup") != std::string::npos)
+    //    prp.emplace(Witness::Property::valid_memcleanup);
     if (str.find("! overflow") != std::string::npos)
         prp.emplace(Witness::Property::no_overflow);
     if (str.find("G ! call(") != std::string::npos)
         prp.emplace(Property::unreach_call);
 
+    if (prp.empty())
+      klee::klee_error("Missing property!");
     return prp;
 
 }
